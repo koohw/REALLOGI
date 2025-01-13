@@ -19,7 +19,8 @@ def button():
             numt_list.append(i)
     print("출력 값", numt_list)
     return render_template("index.html",user_input=numt_list)
+    #index 를 호출하고 user_input 값을 넘겨준다.
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=1234)                      
+    app.run(host='0.0.0.0', port=1234)               #실제 서버  실행       
