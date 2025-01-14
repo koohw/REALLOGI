@@ -22,5 +22,13 @@ def button():
     #index 를 호출하고 user_input 값을 넘겨준다.
 
 
+
+url = 'http://apis.data.go.kr/1220000/retrieveTrifFxrtInfo/getRetrieveTrifFxrtInfo'
+params ={'serviceKey' : '4qxs41THhHNeRdBoc%2BLZa5LBmiBnWzPC0O94UXTUEPz%2BUoJEo77S40ejEzVYk0oYQoJ0xYtEimRxiok3ZckoTg%3D%3D', 'aplyBgnDt' : '20250114', 'weekFxrtTpcd' : '2' }
+
+response = request.get(url, params=params)
+print(response.content)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=1234)               #실제 서버  실행       
