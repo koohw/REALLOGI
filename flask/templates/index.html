@@ -1,17 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>IOT</title>
+    <title>Weather App</title>
     <link rel="stylesheet" href="static/css/styles.css">
 </head>
-
 <body>
-    <form action="/button" method="post">
-        <input type="text" id="inputText" name="inputText" placeholder="숫자 입력">
-        <button class="button" type="submit">Click</button>
-        
-        <p>약수 list : {{user_input}}</p>
-    </form>
+    <div>
+        <h1>날씨 조회</h1>
+        <form action="/" method="post">
+            <label for="city">도시 선택:</label>
+            <select id="city" name="city">
+                <option value="서울">서울</option>
+                <option value="대전">대전</option>
+                <option value="광주">광주</option>
+                <option value="구미">구미</option>
+                <option value="부산">부산</option>
+            </select>
+            <button type="submit">조회</button>
+        </form>
+    </div>
+    <div>
+        <!-- 날씨 결과 표시 -->
+        {% if weather_info %}
+            <h2>날씨 정보</h2>
+            <pre>{{ weather_info }}</pre>
+        {% endif %}
+    </div>
 </body>
 </html>

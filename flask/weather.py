@@ -38,22 +38,21 @@ params ={'serviceKey' : keys,
             'base_time' : get_current_hour_string(), 
             'nx' : '55', 
             'ny' : '127' }
-url = f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst?serviceKey={params['serviceKey']}&pageNo={params['pageNo']}&numOfRows={params['numOfRows']}&dataType={params['dataType']}&base_date={params['base_date']}&base_time={params['base_time']}&nx={params['nx']}&ny={params['ny']}"
+
 
     
 
 def forecast():
     # 값 요청 (웹 브라우저 서버에서 요청 - url주소와 파라미터)
-    
+    url = f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst?serviceKey={params['serviceKey']}&pageNo={params['pageNo']}&numOfRows={params['numOfRows']}&dataType={params['dataType']}&base_date={params['base_date']}&base_time={params['base_time']}&nx={params['nx']}&ny={params['ny']}"
     # res = requests.get(url, params = params)
     res = requests.get(url)
-
     #XML -> 딕셔너리
     xml_data = res.text
     dict_data = xmltodict.parse(xml_data)
-
     #값 가져오기
     weather_data = dict()
+    # print(dict_data['response']['body']['items']['item']['nx'], dict_data['response']['body']['items']['item']['ny'])
     for item in dict_data['response']['body']['items']['item']:
         # 기온
         if item['category'] == 'T1H':
@@ -106,9 +105,11 @@ def proc_weather(city_name):
 def weather_city(city_name):
     params['nx'] = city[city_name]['x']
     params['ny'] = city[city_name]['y']
-    return proc_weather(city_name)
+    result = proc_weather(city_name)
+    print(result)
+    return result
 
-print(weather_city('서울'))
+
 
 '''
 서울 날씨 : 맑음
