@@ -1,17 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>IOT</title>
-    <link rel="stylesheet" href="static/css/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>환율 정보 조회</title>
 </head>
-
 <body>
-    <form action="/button" method="post">
-        <input type="text" id="inputText" name="inputText" placeholder="숫자 입력">
-        <button class="button" type="submit">Click</button>
-        
-        <p>약수 list : {{user_input}}</p>
+    <h1>환율 정보 조회</h1>
+    <form method="POST" action="/button">
+        <label for="searchdate">검색 날짜 (YYYYMMDD):</label>
+        <input type="text" id="searchdate" name="searchdate" placeholder="예: 20250115">
+        <button type="submit">조회하기</button>
     </form>
+
+    {% if exchange_data %}
+        <h2>환율 정보 결과:</h2>
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>통화코드</th>
+                    <th>국가/통화명</th>
+                    <th>전신환(송금 받으실때)</th>
+                    <th>전신환(송금 보내실때)</th>
+                    <th>매매 기준율</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in exchange_data %}
+                <tr>
+                    <td>{{ data['통화코드'] }}</td>
+                    <td>{{ data['국가/통화명'] }}</td>
+                    <td>{{ data['전신환(송금받으실때)'] }}</td>
+                    <td>{{ data['전신환(송금보내실때)'] }}</td>
+                    <td>{{ data['매매기준율'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif error_message %}
+        <p style="color: red;">{{ error_message }}</p>
+    {% endif %}
 </body>
 </html>
