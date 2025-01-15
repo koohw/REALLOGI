@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>IOT</title>
-    <link rel="stylesheet" href="static/css/styles.css">
+    <title>Weather Forecast</title>
 </head>
-
 <body>
-    <form action="/button" method="post">
-        <input type="text" id="inputText" name="inputText" placeholder="숫자 입력">
-        <button class="button" type="submit">Click</button>
-        
-        <p>약수 list : {{user_input}}</p>
+    <h1>지역별 날씨 예보</h1>
+    <form action="/weather" method="get">
+        <label for="region">지역 선택:</label>
+        <input type="text" id="region" name="region" placeholder="예: 서울">
+        <br><br>
+        <label for="base_date">날짜 입력 (YYYYMMDD):</label>
+        <input type="text" id="base_date" name="base_date" placeholder="예: 20250115">
+        <br><br>
+        <button type="submit">날씨 확인</button>
     </form>
 </body>
 </html>

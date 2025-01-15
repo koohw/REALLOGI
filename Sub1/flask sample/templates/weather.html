@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Data</title>
+</head>
+<body>
+    <h1>날씨 데이터</h1>
+    {% if data %}
+        <ul>
+        {% for item in data['response']['body']['items']['item'] %}
+            <li>{{ item['category'] }}: {{ item['fcstValue'] }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>날씨 데이터를 가져오지 못했습니다.</p>
+    {% endif %}
+    <br>
+    <a href="/">홈으로 돌아가기</a>
+</body>
+</html>
