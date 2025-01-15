@@ -100,14 +100,14 @@ def proc_weather(city_name):
     if dict_sky['hum'] != None:
         str_sky = str_sky + "습도 : " + dict_sky['hum'] + '%'
 
-    return str_sky
+    return str_sky, dict_sky['tmp'], dict_sky['hum']
     
 def weather_city(city_name):
     params['nx'] = city[city_name]['x']
     params['ny'] = city[city_name]['y']
-    result = proc_weather(city_name)
+    result, tmp, hum = proc_weather(city_name)
     print(result)
-    return result
+    return result, tmp, hum
 
 
 

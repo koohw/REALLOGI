@@ -8,7 +8,7 @@ def index():
     if request.method == "POST":
         city_name = request.form.get('city')  # 선택된 도시 가져오기
         if city_name in city:  # 유효한 도시인지 확인
-            weather_info = weather_city(city_name)  # 날씨 정보 가져오기
+            weather_info, tmp, hum = weather_city(city_name)  # 날씨 정보 가져오기
         else:
             weather_info = "도시를 선택해주세요."
         return render_template("index.html", weather_info=weather_info)
