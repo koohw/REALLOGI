@@ -1,18 +1,13 @@
 from flask import Flask, render_template, request
 import requests
 from datetime import datetime
-import time
-from RPLCD.i2c import CharLCD
+
 
 app = Flask(__name__)
 
 # API URL 및 인증키
 API_URL = 'https://www.koreaexim.go.kr/site/program/financial/exchangeJSON'
-API_KEY = '98IzSyf3L8LYPEhydcM8b8cjFoqkGuwi'
-
-# LCD 설정
-I2C_ADDR = 0x27  # I2C 주소 (i2cdetect 명령어로 확인)
-lcd = CharLCD('PCF8574', I2C_ADDR, port=1)
+API_KEY = '98IzSyf3L8LYPEhydcM8b8cjFoqkGuwi'  
 
 @app.route('/', methods=["GET"])
 def index():
@@ -43,8 +38,6 @@ def button():
 
         if not data:
             error_message = f"{search_date}에 대한 데이터가 없습니다."
-            lcd.clear()
-            lcd.write_string("No data found.")
             return render_template("index.html", error_message=error_message)
 
         # RESULT 코드 확인
@@ -60,24 +53,13 @@ def button():
                 }
                 for item in data
             ]
-
-            # LCD에 첫 번째 환율 정보 출력 (예: USD)
-            first_currency = exchange_data[0]  # 첫 번째 통화 정보 가져오기
-            lcd.clear()
-            lcd.write_string(f"{first_currency['통화코드']} {first_currency['매매기준율']}")
-            time.sleep(5)  # 5초 동안 표시
-
             return render_template("index.html", exchange_data=exchange_data)
         else:
             error_message = f"API 오류: RESULT 코드 {result_code} (인증키 또는 요청 파라미터를 확인하세요)"
-            lcd.clear()
-            lcd.write_string("API Error")
             return render_template("index.html", error_message=error_message)
 
     except Exception as e:
         error_message = f"요청 중 오류 발생: {str(e)}"
-        lcd.clear()
-        lcd.write_string("Request Error")
         return render_template("index.html", error_message=error_message)
 
 if __name__ == '__main__':
