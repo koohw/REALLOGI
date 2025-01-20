@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 2
+names: ['fire', 'smoke']
+
+roboflow:
+  workspace: aii-ft1y5
+  project: test-e2wre
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/aii-ft1y5/test-e2wre/dataset/1

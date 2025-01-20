@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jetson Orin Control Panel</title>
+    <link rel="stylesheet" href="static/css/joystick.css">
+</head>
+<body>
+    <h1>Jetson Orin Camera Stream</h1>
+    <div class="container">
+        <img src="{{ url_for('video_feed') }}" alt="Camera Feed">
+        <div class="joystick">
+            <form id="joystick_form">
+                <div class="row">
+                    <button class="button" name="direction" value="up" type="button" onclick="sendCommand('up')">↑</button>
+                </div>
+                <div class="row">
+                    <button class="button" name="direction" value="left" type="button" onclick="sendCommand('left')">←</button>
+                    <button class="button" name="direction" value="stop" type="button" onclick="sendCommand('stop')">STOP</button>
+                    <button class="button" name="direction" value="right" type="button" onclick="sendCommand('right')">→</button>
+                </div>
+                <div class="row">
+                    <button class="button" name="direction" value="down" type="button" onclick="sendCommand('down')">↓</button>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="inputText" name="inputText" placeholder="Enter command">
+                    <button class="button submit-button" type="button" onclick="sendCommand('o')">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+        function sendCommand(direction) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/joystick", true);
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+            
+            // 입력된 텍스트 가져오기
+            const inputText = document.getElementById('inputText').value;
+
+            // direction이 'o'인 경우 inputText를 함께 전송
+            if (direction === 'o') {
+                xhr.send("direction=" + direction + "&inputText=" + encodeURIComponent(inputText));
+            } else {
+                xhr.send("direction=" + direction);
+            }
+        }
+    </script>
+</body>
+</html>
+

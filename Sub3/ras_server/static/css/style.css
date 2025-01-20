@@ -1,0 +1,39 @@
+/* 모바일 환경을 고려한 스타일 */
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f4f4f4;
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    text-align: center;
+}
+
+.button {
+    display: inline-block;
+    width: 100%;
+    max-width: 200px;
+    padding: 15px 25px;
+    margin: 10px;
+    font-size: 16px;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+
+.button-3 {
+    background-color: #dc3545; /* 빨간색 */
+}
+
+.button-3:hover {
+    background-color: #c82333;
+}

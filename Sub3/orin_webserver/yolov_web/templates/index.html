@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Detection</title>
+    <link rel="stylesheet" href="static/css/main.css">
+</head>
+<body>
+    <h1>Object Detection with YOLOv8</h1>
+
+    <form action="/button" method="POST">
+        <label for="inputText">Enter object name:</label>
+        <input type="text" id="inputText" name="inputText">
+        <button type="submit" class="button">Detect</button>
+    </form>
+
+    <div>
+        <img src="{{ url_for('video_feed') }}" alt="Video Stream">
+    </div>
+</body>
+</html>
