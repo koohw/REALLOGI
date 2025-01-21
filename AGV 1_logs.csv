@@ -1,0 +1,10 @@
+time,position,state
+0,"(0, 1)",moving
+1,"(0, 2)",moving
+2,"(0, 3)",moving
+3,"(0, 4)",moving
+4,"(1, 4)",moving
+5,"(2, 4)",moving
+6,"(3, 4)",moving
+7,"(4, 4)",moving
+8,"(4, 4)",reached
