@@ -1,21 +1,18 @@
 
 import './App.css';
 
-import React, { Fragment,Component } from 'react';
-
-import IterationSample from './IterationSample';
-
-class App extends Component{
+import React, { Fragment } from 'react';
+import Info from './Info';
 
 
-  render() {
-    return (
-      <Fragment>
-       <IterationSample />
-      </Fragment>
-    );
-  }
-}
+const App = () => {
+
+  return (
+  <Fragment>
+    <Info />
+  </Fragment>
+  )
+};
 
 
 export default App;
