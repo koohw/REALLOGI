@@ -1,95 +1,66 @@
-from flask import Flask, jsonify
-import simpy
+from flask import Flask, render_template, jsonify
 import threading
-import time
-import random
+
+# 시뮬레이션(AGV 2,3,4)에서 사용하는 shared_data, 실행 함수
+from simulation import shared_data, run_simulation_forever
+
+# AGV 1 MQTT 실행 함수
+from mqtt_agv1 import run_mqtt_agv1_forever
 
 app = Flask(__name__)
 
-# AGV 시뮬레이션에서 사용하는 shared_data
-shared_data = {
-    "positions": {},  # AGV 위치
-    "obstacles": [],  # 장애물 위치
-    "statuses": {},   # AGV 상태
-    "logs": {         # AGV 이동 기록
-        "AGV 1": [],
-        "AGV 2": []
-    }
-}
+# -------------------------
+# 1) MQTT -> Flask 콜백
+# -------------------------
+def agv1_update_callback(agv_id, position):
+    """
+    AGV 1의 위치가 갱신될 때마다 호출됨.
+    여기서 simulation.py의 shared_data에 반영.
+    """
+    # 상태를 moving으로 가정 (필요 시 로직 보강)
+    shared_data["statuses"][agv_id] = "moving"
+    shared_data["positions"][agv_id] = position
 
-# AGV 클래스 정의
-class AGV:
-    def __init__(self, env, name, speed):
-        self.env = env
-        self.name = name
-        self.speed = speed
-        self.position = (0, 0)
-        self.status = "idle"
+    # 로그에 기록 (source="mqtt")
+    shared_data["logs"][agv_id].append({
+        "time": "mqtt",  # SimPy env.now를 못쓰므로 임의로 "mqtt" 표시
+        "position": position,
+        "state": "moving",
+        "source": "mqtt"
+    })
 
-    def move(self, target_position):
-        """AGV를 목표 위치로 이동시키는 프로세스"""
-        shared_data["statuses"][self.name] = "moving"
-        while self.position != target_position:
-            # 위치 업데이트
-            x, y = self.position
-            target_x, target_y = target_position
-            if x != target_x:
-                x += 1 if x < target_x else -1
-            elif y != target_y:
-                y += 1 if y < target_y else -1
-            self.position = (x, y)
+# -------------------------
+# 2) Flask 라우트
+# -------------------------
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-            # 이동 기록 업데이트
-            shared_data["logs"][self.name].append({
-                "time": self.env.now,
-                "position": self.position,
-                "state": "moving"
-            })
-
-            # 딜레이
-            yield self.env.timeout(1 / self.speed)
-
-        shared_data["statuses"][self.name] = "idle"
-        shared_data["logs"][self.name].append({
-            "time": self.env.now,
-            "position": self.position,
-            "state": "idle"
-        })
-
-# Simpy 환경 설정
-def simulation_environment():
-    env = simpy.Environment()
-    
-    # AGV 생성
-    agv1 = AGV(env, "AGV 1", speed=1)
-    agv2 = AGV(env, "AGV 2", speed=1.5)
-    shared_data["statuses"]["AGV 1"] = "idle"
-    shared_data["statuses"]["AGV 2"] = "idle"
-
-    # Simpy 프로세스 시작
-    env.process(agv1.move((5, 5)))
-    env.process(agv2.move((3, 7)))
-
-    # Simpy 실행
-    env.run(until=20)
-
-# Simpy를 별도의 쓰레드로 실행
-def run_simulation():
-    while True:
-        simulation_environment()
-        time.sleep(1)
-
-# Flask API 엔드포인트
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
-    """AGV 이동 기록을 JSON 형태로 반환"""
+    """ 모든 AGV(1~4)의 이동 로그 반환 """
     return jsonify(shared_data["logs"])
 
-# Flask 서버 실행
-if __name__ == '__main__':
-    # Simpy 쓰레드 시작
-    simpy_thread = threading.Thread(target=run_simulation, daemon=True)
-    simpy_thread.start()
+@app.route('/api/positions', methods=['GET'])
+def get_positions():
+    """ 모든 AGV(1~4)의 현재 좌표 반환 """
+    return jsonify(shared_data["positions"])
 
-    # Flask 서버 실행
+# -------------------------
+# 3) 앱 실행
+# -------------------------
+if __name__ == '__main__':
+    # (1) SimPy 시뮬레이션 스레드 (AGV 2,3,4)
+    sim_thread = threading.Thread(target=run_simulation_forever, daemon=True)
+    sim_thread.start()
+
+    # (2) MQTT 스레드 (AGV 1)
+    mqtt_thread = threading.Thread(
+        target=run_mqtt_agv1_forever, 
+        args=(agv1_update_callback,),
+        daemon=True
+    )
+    mqtt_thread.start()
+
+    # (3) Flask 서버
     app.run(host='0.0.0.0', port=5000)
