@@ -3,8 +3,12 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { createStore } from 'redux';
+import rootReducer from './modules';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
+const store = createStore(rootReducer); // 스토어를 만듭니다.
+console.log(store.getState()); // 스토어의 상태를 확인해봅시다.
 root.render(
   <React.StrictMode>
     <App />
