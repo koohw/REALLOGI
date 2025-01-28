@@ -1,24 +1,30 @@
-import logo from './logo.svg';
-import './App.css';
+// App.js
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import Sidebar from './components/Sidebar';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <div className="flex min-h-screen bg-white">
+        {/* 좌측 사이드바 영역 */}
+        <div className="w-80 border-r border-gray-200">
+         
+          <Sidebar />
+        </div>
+
+        {/* 우측 메인 컨텐츠 영역 */}
+        <div className="flex-1">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/monitor" element={<div>실시간 모니터링</div>} />
+            <Route path="/simulation" element={<div>효율 예상/예측</div>} />
+            <Route path="/agv" element={<div>AGV 등록</div>} />
+            <Route path="/admin" element={<div>관리자 정보 수정</div>} />
+          </Routes>
+        </div>
+      </div>
+    </Router>
   );
 }
 
