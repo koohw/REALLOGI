@@ -104,7 +104,7 @@ public class UserService {
     public ApiResponse<User> getCurrentUser() {
         User user = (User) httpSession.getAttribute("USER");
         if (user == null) {
-            throw new IllegalStateException("Not logged in");
+            return new ApiResponse<>(false, "Not logged in", null);
         }
         return new ApiResponse<>(true, "Current user retrieved", user);
     }
@@ -122,5 +122,13 @@ public class UserService {
                 .collect(Collectors.toList());
 
         return new ApiResponse<>(true, "Warehouses retrieved", warehouseDtos);
+    }
+
+    public ApiResponse<Boolean> checkEmailDuplicate(String email) {
+        boolean exists = userRepository.findByEmail(email).isPresent();
+        if (exists) {
+            return new ApiResponse<>(false, "Email already exists", true);
+        }
+        return new ApiResponse<>(true, "Email is available", false);
     }
 }

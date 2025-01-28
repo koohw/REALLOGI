@@ -47,4 +47,9 @@ public class UserController {
             @PathVariable Integer companyId) {
         return ResponseEntity.ok(userService.getWarehousesByCompany(companyId));
     }
+
+    @GetMapping("/check-email")
+    public ResponseEntity<ApiResponse<Boolean>> checkEmailDuplicate(@RequestParam String email) {
+        return ResponseEntity.ok(userService.checkEmailDuplicate(email));
+    }
 }
