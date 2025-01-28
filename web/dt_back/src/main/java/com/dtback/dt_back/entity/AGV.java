@@ -15,10 +15,6 @@ public class AGV {
     private String agvCode;
     private String agvModel;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
-    private Warehouse warehouse;
+    private Integer warehouseId;
 
-    @OneToMany(mappedBy = "agv")
-    private List<AGVLog> logs = new ArrayList<>();
 }

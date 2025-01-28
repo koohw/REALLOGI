@@ -15,10 +15,5 @@ public class Warehouse {
     private String warehouseName;
     private String warehouseCode;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id")
-    private Company company;
-
-    @OneToMany(mappedBy = "warehouse")
-    private List<AGV> agvs = new ArrayList<>();
+    private Integer companyId;
 }

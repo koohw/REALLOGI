@@ -22,7 +22,6 @@ public class AGVLog {
     @Column(name = "log_time")
     private LocalDateTime logTime;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agv_id")
-    private AGV agv;
+
+    private Integer agv_id;
 }

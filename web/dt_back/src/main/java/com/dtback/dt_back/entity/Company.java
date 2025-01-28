@@ -16,6 +16,5 @@ public class Company {
 
     public Company() {}
 
-    @OneToMany(mappedBy = "company")
-    private List<Warehouse> warehouses = new ArrayList<>();
+
 }
