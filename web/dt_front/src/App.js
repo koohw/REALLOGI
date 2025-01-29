@@ -2,6 +2,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Sidebar from './components/Sidebar';
+import Simulation from "./components/Simulation";
 
 function App() {
   return (
@@ -18,7 +19,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/monitor" element={<div>실시간 모니터링</div>} />
-            <Route path="/simulation" element={<div>효율 예상/예측</div>} />
+            <Route path="/simulation" element={<Simulation />} />
             <Route path="/agv" element={<div>AGV 등록</div>} />
             <Route path="/admin" element={<div>관리자 정보 수정</div>} />
           </Routes>
