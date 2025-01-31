@@ -1,50 +1,32 @@
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-import { useAuth } from "./hooks/useAuth";
+// App.js
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import DashboardPage from "./pages/DashboardPage";
+import SimulationPage from "./pages/SimulationPage";
+import AgvRegisterPage from "./pages/AgvRegisterPage";
+import ModifyInfoPage from "./pages/ModifyInfoPage";
+import MonitorPage from "./pages/MonitorPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import Layout from "./Layout";
+import PublicLayout from "./PublicLayout";
 
 function App() {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800"></div>
-      </div>
-    );
-  }
-
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        {/* 공개 라우트 */}
-        <Route
-          path="/login"
-          element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
-        />
-
-        {/* 보호된 라우트 */}
-        <Route
-          path="/dashboard"
-          element={
-            user ? <div>Dashboard Page</div> : <Navigate to="/login" replace />
-          }
-        />
-
-        {/* 기본 리다이렉트 */}
-        <Route
-          path="/"
-          element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
-        />
-
-        <Route path="/signup" element={<SignupPage />} />
+        <Route element={<PublicLayout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+        </Route>
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/agv-register" element={<AgvRegisterPage />} />
+          <Route path="/monitor" element={<MonitorPage />} />
+          <Route path="/simulation" element={<SimulationPage />} />
+          <Route path="/modify-info" element={<ModifyInfoPage />} />
+        </Route>
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
 

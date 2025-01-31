@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { authApi } from "../api/authApi";
 
-export const useAuth = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+// hooks/useAuth.js에서 인증 상태 확인 로직 추가
+const useAuth = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     checkAuth();
@@ -11,29 +12,14 @@ export const useAuth = () => {
 
   const checkAuth = async () => {
     try {
-      const response = await authApi.getCurrentUser();
-      if (response.success && response.data) {
-        setUser(response.data);
-      } else {
-        setUser(null);
-      }
+      const user = await authApi.getCurrentUser();
+      setIsAuthenticated(!!user);
     } catch (error) {
-      setUser(null);
+      setIsAuthenticated(false);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const logout = async () => {
-    try {
-      const response = await authApi.logout();
-      if (response.success) {
-        setUser(null);
-      }
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
-  return { user, loading, logout, checkAuth };
+  return { isAuthenticated, isLoading };
 };
