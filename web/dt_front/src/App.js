@@ -1,50 +1,70 @@
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-import { useAuth } from "./hooks/useAuth";
+// src/App.js
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Provider } from "react-redux";
+import store from "./store";
+import DashboardPage from "./pages/DashboardPage";
+import SimulationPage from "./pages/SimulationPage";
+import AgvRegisterPage from "./pages/AgvRegisterPage";
+import ModifyInfoPage from "./pages/ModifyInfoPage";
+import MonitorPage from "./pages/MonitorPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import { useAuth } from './hooks/useAuth';
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth(); // 인증 상태 확인
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800"></div>
-      </div>
-    );
+    return <div>Loading...</div>; // 인증 상태를 확인하는 동안 로딩 화면을 표시
   }
 
   return (
-    <Router>
-      <Routes>
-        {/* 공개 라우트 */}
+    <Provider store={store}>
+      <BrowserRouter>
+        <Routes>
         <Route
-          path="/login"
-          element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
-        />
-
-        {/* 보호된 라우트 */}
-        <Route
-          path="/dashboard"
-          element={
-            user ? <div>Dashboard Page</div> : <Navigate to="/login" replace />
-          }
-        />
-
-        {/* 기본 리다이렉트 */}
-        <Route
-          path="/"
-          element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
-        />
-
-        <Route path="/signup" element={<SignupPage />} />
-      </Routes>
-    </Router>
+              path="/"
+              element={user ? <DashboardPage /> : <Navigate to="/login" />}
+            />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/simulation"
+            element={
+              <ProtectedRoute>
+                <SimulationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agv-register"
+            element={
+              <ProtectedRoute>
+                <AgvRegisterPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/modify-info"
+            element={
+              <ProtectedRoute>
+                <ModifyInfoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/monitor" element={<MonitorPage />} />
+        </Routes>
+      </BrowserRouter>
+    </Provider>
   );
 }
 

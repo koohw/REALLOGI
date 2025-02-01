@@ -28,7 +28,7 @@ export const useAuth = () => {
     try {
       const response = await authApi.logout();
       if (response.success) {
-        setUser(null);
+        setUser(null); // 로그아웃 시 user 상태 초기화
       }
     } catch (error) {
       console.error("Logout failed:", error);
@@ -37,3 +37,4 @@ export const useAuth = () => {
 
   return { user, loading, logout, checkAuth };
 };
+
