@@ -1,4 +1,8 @@
 import Dashboard from "../components/Dashboard";
+<<<<<<< HEAD
+=======
+import Sidebar from "../components/Sidebar";
+>>>>>>> e71f8ea46ce89185e7502f21fb024b5c6826c008
 
 function DashboardPage() {
   return (
