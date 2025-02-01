@@ -1,20 +1,23 @@
+// src/pages/LoginPage.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authApi } from "../api/authApi";
-import { useAuth } from "../hooks/useAuth"; // useAuth 추가
+import { useDispatch } from "react-redux";
+import { login } from "../features/userSlice";  // 로그인 액션 import
 import LoginForm from "../components/LoginForm";
+import { authApi } from "../api/authApi";
 
 const LoginPage = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
-  const { checkAuth } = useAuth(); // useAuth에서 checkAuth 가져오기
+  const dispatch = useDispatch();
 
   const handleLogin = async ({ email, password }) => {
     try {
       const response = await authApi.login(email, password);
       if (response.success) {
-        await checkAuth(); // 로그인 성공 후 유저 상태 업데이트
-        navigate("/dashboard");
+        // 로그인 성공 후 리덕스 상태에 사용자 정보 저장
+        dispatch(login(response.data));
+        navigate("/dashboard");  // 대시보드로 리디렉션
       } else {
         setError(response.message);
       }
