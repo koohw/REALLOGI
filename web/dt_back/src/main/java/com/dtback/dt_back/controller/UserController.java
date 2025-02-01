@@ -2,6 +2,7 @@ package com.dtback.dt_back.controller;
 
 import com.dtback.dt_back.dto.request.LoginRequestDto;
 import com.dtback.dt_back.dto.request.SignupRequestDto;
+import com.dtback.dt_back.dto.request.UpdateUserRequestDto;
 import com.dtback.dt_back.dto.response.ApiResponse;
 import com.dtback.dt_back.dto.response.WarehouseDto;
 import com.dtback.dt_back.entity.User;
@@ -14,6 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
+@CrossOrigin(origins = "http://localhost:3000")
 public class UserController {
     private final UserService userService;
 
@@ -51,5 +53,10 @@ public class UserController {
     @GetMapping("/check-email")
     public ResponseEntity<ApiResponse<Boolean>> checkEmailDuplicate(@RequestParam String email) {
         return ResponseEntity.ok(userService.checkEmailDuplicate(email));
+    }
+
+    @PutMapping("/update")
+    public ResponseEntity<ApiResponse<User>> updateUserInfo(@RequestBody UpdateUserRequestDto updateDto) {
+        return ResponseEntity.ok(userService.updateUserInfo(updateDto));
     }
 }

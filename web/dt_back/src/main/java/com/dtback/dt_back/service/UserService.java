@@ -2,6 +2,7 @@ package com.dtback.dt_back.service;
 
 import com.dtback.dt_back.dto.request.LoginRequestDto;
 import com.dtback.dt_back.dto.request.SignupRequestDto;
+import com.dtback.dt_back.dto.request.UpdateUserRequestDto;
 import com.dtback.dt_back.dto.response.ApiResponse;
 import com.dtback.dt_back.dto.response.WarehouseDto;
 import com.dtback.dt_back.entity.Company;
@@ -14,12 +15,14 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class UserService {
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
@@ -130,5 +133,37 @@ public class UserService {
             return new ApiResponse<>(false, "Email already exists", true);
         }
         return new ApiResponse<>(true, "Email is available", false);
+    }
+
+    public ApiResponse<User> updateUserInfo(UpdateUserRequestDto updateDto) {
+        User currentUser = (User) httpSession.getAttribute("USER");
+        if (currentUser == null) {
+            throw new IllegalStateException("User not logged in");
+        }
+
+        if (!currentUser.getPassword().equals(updateDto.getCurrentPassword())) {
+            throw new IllegalArgumentException("Current password is incorrect");
+        }
+
+        if (updateDto.getNewPassword() != null && !updateDto.getNewPassword().isEmpty()) {
+            currentUser.setPassword(updateDto.getNewPassword());
+        }
+
+        if (updateDto.getUserName() != null && !updateDto.getUserName().isEmpty()) {
+            currentUser.setUserName(updateDto.getUserName());
+        }
+
+        if (updateDto.getPhoneNumber() != null) {
+            currentUser.setPhoneNumber(updateDto.getPhoneNumber());
+        }
+
+        User updatedUser = userRepository.save(currentUser);
+        httpSession.setAttribute("USER", updatedUser);
+
+        return new ApiResponse<>(
+                true,
+                "User information updated successfully",
+                updatedUser
+        );
     }
 }

@@ -1,86 +1,110 @@
-const BASE_URL = "http://localhost:8080/api/users";
+import axios from 'axios';
+
+const BASE_URL = 'http://localhost:8080/api';
+
+// Create axios instance with default config
+const apiClient = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Request interceptor
+apiClient.interceptors.request.use(
+  (config) => {
+    // You can add custom logic here (e.g., adding auth tokens)
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor
+apiClient.interceptors.response.use(
+  (response) => {
+    return response.data;
+  },
+  (error) => {
+    const customError = {
+      message: error.response?.data?.message || 'An error occurred',
+      status: error.response?.status,
+      data: error.response?.data
+    };
+    return Promise.reject(customError);
+  }
+);
 
 export const authApi = {
   login: async (email, password) => {
     try {
-      const response = await fetch(`${BASE_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-      return await response.json();
+      return await apiClient.post('/users/login', { email, password });
     } catch (error) {
-      throw new Error("Login failed");
+      throw new Error(error.message || 'Login failed');
     }
   },
 
   logout: async () => {
     try {
-      const response = await fetch(`${BASE_URL}/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-      return await response.json();
+      return await apiClient.post('/users/logout');
     } catch (error) {
-      throw new Error("Logout failed");
+      throw new Error(error.message || 'Logout failed');
     }
   },
 
   getCurrentUser: async () => {
     try {
-      const response = await fetch(`${BASE_URL}/current`, {
-        credentials: "include",
-      });
-      return await response.json();
+      return await apiClient.get('/users/current');
     } catch (error) {
-      throw new Error("Failed to get current user");
+      throw new Error(error.message || 'Failed to get current user');
     }
   },
+
   checkEmail: async (email) => {
     try {
-      const response = await fetch(`${BASE_URL}/check-email?email=${email}`, {
-        credentials: "include",
+      return await apiClient.get('/users/check-email', {
+        params: { email }
       });
-      return await response.json();
     } catch (error) {
-      throw new Error("Email check failed");
+      throw new Error(error.message || 'Email check failed');
     }
   },
 
   signup: async (userData) => {
     try {
-      const response = await fetch(`${BASE_URL}/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(userData),
-      });
-      return await response.json();
+      return await apiClient.post('/users/signup', userData);
     } catch (error) {
-      throw new Error("Signup failed");
+      throw new Error(error.message || 'Signup failed');
+    }
+  },
+
+  updateUserInfo: async (updateData) => {
+    try {
+      return await apiClient.put('/users/update', updateData);
+    } catch (error) {
+      throw new Error(error.message || 'Update failed');
     }
   },
 
   getCompanies: async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/companies", {
-        credentials: "include",
-      });
-      return await response.json();
+      return await apiClient.get('/companies');
     } catch (error) {
-      throw new Error("Failed to fetch companies");
+      throw new Error(error.message || 'Failed to fetch companies');
     }
   },
 
   getWarehouses: async (companyId) => {
     try {
-      const response = await fetch(`${BASE_URL}/warehouses/${companyId}`, {
-        credentials: "include",
-      });
-      return await response.json();
+      return await apiClient.get(`/users/warehouses/${companyId}`);
     } catch (error) {
-      throw new Error("Failed to fetch warehouses");
+      throw new Error(error.message || 'Failed to fetch warehouses');
     }
-  },
+  }
 };
+
+// Usage example:
+// import { authApi } from './services/api';
+// const response = await authApi.login(email, password);
