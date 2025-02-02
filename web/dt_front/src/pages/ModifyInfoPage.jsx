@@ -1,4 +1,5 @@
 import Sidebar from "../components/Sidebar";
+import ModifyInfoForm from "../components/ModifyInfoFrom";
 
 function ModifyInfoPage() {
   return (
@@ -10,7 +11,7 @@ function ModifyInfoPage() {
 
       {/* 우측 메인 컨텐츠 영역 */}
       <div className="flex-1">
-        <div>정보 수정</div>
+        <ModifyInfoForm />
       </div>
     </div>
   );

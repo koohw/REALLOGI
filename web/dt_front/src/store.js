@@ -1,11 +1,20 @@
-// src/store.js
 import { configureStore } from "@reduxjs/toolkit";
+import { persistStore, persistReducer } from "redux-persist";
+import storage from "redux-persist/lib/storage"; // localStorage 사용
 import userReducer from "./features/userSlice";
+
+const persistConfig = {
+  key: "user",
+  storage, // localStorage에 저장
+};
+
+const persistedReducer = persistReducer(persistConfig, userReducer);
 
 const store = configureStore({
   reducer: {
-    user: userReducer, // user slice를 리듀서로 사용
+    user: persistedReducer,
   },
 });
 
+export const persistor = persistStore(store);
 export default store;

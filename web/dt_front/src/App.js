@@ -1,7 +1,7 @@
 // src/App.js
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Provider } from "react-redux";
-import store from "./store";
+import { Provider, useDispatch } from "react-redux";
+import store, { persistor } from "./store";
 import DashboardPage from "./pages/DashboardPage";
 import SimulationPage from "./pages/SimulationPage";
 import AgvRegisterPage from "./pages/AgvRegisterPage";
@@ -9,62 +9,52 @@ import ModifyInfoPage from "./pages/ModifyInfoPage";
 import MonitorPage from "./pages/MonitorPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from "./components/ProtectedRoute";
+import { PersistGate } from "redux-persist/integration/react";
+import { rehydrate } from "./features/userSlice";
+import { useEffect } from "react";
 
 function App() {
-  const { user, loading } = useAuth(); // 인증 상태 확인
-
-  if (loading) {
-    return <div>Loading...</div>; // 인증 상태를 확인하는 동안 로딩 화면을 표시
-  }
-
   return (
     <Provider store={store}>
-      <BrowserRouter>
-        <Routes>
-        <Route
-              path="/"
-              element={user ? <DashboardPage /> : <Navigate to="/login" />}
-            />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/simulation"
-            element={
-              <ProtectedRoute>
-                <SimulationPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/agv-register"
-            element={
-              <ProtectedRoute>
-                <AgvRegisterPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/modify-info"
-            element={
-              <ProtectedRoute>
-                <ModifyInfoPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/monitor" element={<MonitorPage />} />
-        </Routes>
-      </BrowserRouter>
+      <PersistGate loading={null} persistor={persistor}>
+        <MainApp />
+      </PersistGate>
     </Provider>
+  );
+}
+
+// 🔹 Redux와 관련된 로직을 별도 컴포넌트로 분리
+function MainApp() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    const persistedState = localStorage.getItem("persist:user");
+
+    // 로컬스토리지에 저장된 값이 존재하는 경우 JSON 파싱
+    if (persistedState) {
+      try {
+        const parsedState = JSON.parse(persistedState);
+        dispatch(rehydrate(parsedState));
+      } catch (error) {
+        console.error("Failed to parse persisted state:", error);
+      }
+    }
+  }, [dispatch]);
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/simulation" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
+        <Route path="/agv-register" element={<ProtectedRoute><AgvRegisterPage /></ProtectedRoute>} />
+        <Route path="/modify-info" element={<ProtectedRoute><ModifyInfoPage /></ProtectedRoute>} />
+        <Route path="/monitor" element={<MonitorPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
