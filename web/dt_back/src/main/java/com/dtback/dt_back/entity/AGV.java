@@ -9,8 +9,10 @@ import java.util.List;
 @Entity
 @Getter @Setter
 public class AGV {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer agvId;
+    private String agvName;
 
     private String agvCode;
     private String agvModel;

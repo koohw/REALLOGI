@@ -1,25 +1,55 @@
-import { useState } from 'react';
+import { useState ,useEffect} from 'react';
+import axios from 'axios';
 
 export default function AgvForm({ onSubmit }) {
   const [formData, setFormData] = useState({
-    name: '',
-    registrationId: '',
-    AgvModel: '',
-    description: '',
-    isConnected: false
+    agv_name: '',
+    agv_code: '',
+    agv_model: '',
+    footnote: '',
+    warehouseId : ''
   });
+  
+
+  useEffect(() => {
+    // localStorage에서 warehouse_id 가져오기
+    const warehouse_id = localStorage.getItem('warehouse_id');
+    if (warehouse_id) {
+      setFormData(prev => ({
+        ...prev,
+        warehouse_id: parseInt(warehouse_id)
+      }));
+    }
+  }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    try {
+      const response = await axios.post('http://localhost:8080/api/Agvs/register', formData);
+      if (response.data.isSuccess) {
+        alert('AGV가 성공적으로 등록되었습니다.');
+        // 폼 초기화
+        setFormData({
+          agv_name: '',
+          agv_code: '',
+          agv_model: '',
+          footnote: '',
+          warehouse_id: formData.warehouse_id
+        });
+      } else {
+        alert(response.data.message);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('AGV 등록에 실패했습니다.');
+    }
   };
 
   return (
@@ -28,8 +58,8 @@ export default function AgvForm({ onSubmit }) {
         <label className="block text-sm font-medium">Name</label>
         <input
           type="text"
-          name="name"
-          value={formData.name}
+          name="agv_name"
+          value={formData.agv_name}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
           placeholder="Agv 이름"
@@ -38,14 +68,14 @@ export default function AgvForm({ onSubmit }) {
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium">ID</label>
+        <label className="block text-sm font-medium">code</label>
         <input
           type="text"
-          name="registrationId"
-          value={formData.registrationId}
+          name="agv_code"
+          value={formData.agv_code}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
-          placeholder="Agv ID"
+          placeholder="AGV 코드"
           required
         />
       </div>
@@ -53,30 +83,21 @@ export default function AgvForm({ onSubmit }) {
       <div className="space-y-2">
         <label className="block text-sm font-medium">Model</label>
         <input
-          type="text"
-          name="AgvModel"
-          value={formData.AgvModel}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg"
-          placeholder="Agv 모델명"
-          required
+           type="text"
+           name="agv_model"
+           value={formData.agv_model}
+           onChange={handleChange}
+           className="w-full p-2 border rounded-lg"
+           placeholder="AGV 모델명"
+           required
         />
       </div>
 
       <div className="space-y-2">
-        <label className="block text-sm font-medium">Connect</label>
-        <div className={`p-2 rounded-lg ${
-          formData.isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-        }`}>
-          {formData.isConnected ? 'Connected' : 'Disconnected'}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <label className="block text-sm font-medium">Description</label>
+        <label className="block text-sm font-medium">비고</label>
         <textarea
-          name="description"
-          value={formData.description}
+          name="footnote"
+          value={formData.footnote}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg h-32"
           placeholder="비고"
@@ -88,7 +109,7 @@ export default function AgvForm({ onSubmit }) {
         type="submit"
         className="w-full bg-black text-white py-3 rounded-lg hover:bg-gray-800 transition-colors"
       >
-        Submit
+        AGV 등록
       </button>
     </form>
   );
