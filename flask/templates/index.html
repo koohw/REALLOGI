@@ -1,15 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Flask + MQTT + SimPy</title>
+    <title>SSE 실시간 AGV 데이터</title>
 </head>
 <body>
-    <h1>AGV Dashboard</h1>
-    <p>이 페이지에서는 간단히 API 링크만 안내합니다.</p>
-    <ul>
-        <li><a href="/api/positions" target="_blank">/api/positions</a> (모든 AGV 현재 좌표)</li>
-        <li><a href="/api/logs" target="_blank">/api/logs</a> (모든 AGV 이동 로그)</li>
-    </ul>
+    <h1>SSE를 통한 AGV 데이터</h1>
+    <div id="output"></div>
+    <script>
+        // /stream 엔드포인트에 SSE 연결
+        const eventSource = new EventSource("/stream");
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log("수신 데이터:", data);
+            // 원하는 방식으로 데이터를 화면에 표시합니다.
+            document.getElementById("output").innerHTML = JSON.stringify(data, null, 2);
+        };
+        
+        eventSource.onerror = function(error) {
+            console.error("SSE 연결 오류:", error);
+        };
+    </script>
 </body>
 </html>
