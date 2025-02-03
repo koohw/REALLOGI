@@ -1,12 +1,9 @@
 import simpy
-import time
 from datetime import datetime
 from threading import Lock
 
-# ===============================
-# 전역 공유 데이터 & 락
-# ===============================
-data_lock = Lock()  # shared_data 접근 시 사용
+# 전역 공유 데이터 및 락
+data_lock = Lock()
 shared_data = {
     "positions": {
         "AGV 1": (0, 0),
@@ -25,6 +22,12 @@ shared_data = {
         "AGV 2": [],
         "AGV 3": [],
         "AGV 4": []
+    },
+    "directions": {
+        "AGV 1": "N/A",
+        "AGV 2": "N/A",
+        "AGV 3": "N/A",
+        "AGV 4": "N/A"
     }
 }
 
@@ -36,69 +39,87 @@ class AGV:
         self.position = (0, 0)
 
     def move(self, target_position):
-        """
-        AGV가 target_position까지 이동하는 과정을 시뮬레이션.
-        이동 중에는 shared_data에 실시간 시각으로 로그를 기록.
-        """
         with data_lock:
             shared_data["statuses"][self.name] = "moving"
 
         while self.position != target_position:
             x, y = self.position
             tx, ty = target_position
-
+            direction = "N/A"
             if x < tx:
                 x += 1
+                direction = "R"
             elif x > tx:
                 x -= 1
+                direction = "L"
             elif y < ty:
                 y += 1
+                direction = "U"
             elif y > ty:
                 y -= 1
+                direction = "D"
 
             self.position = (x, y)
 
             with data_lock:
-                # 이동 로그 (실제 시스템 시각)
                 shared_data["logs"][self.name].append({
                     "time": datetime.now().isoformat(),
                     "position": self.position,
+                    "direction": direction,
                     "state": "moving",
                     "source": "simulation"
                 })
-                # 위치 정보 갱신
                 shared_data["positions"][self.name] = self.position
+                shared_data["directions"][self.name] = direction
 
             yield self.env.timeout(1 / self.speed)
 
-        # 목표 도달 후 idle 상태 처리
         with data_lock:
             shared_data["statuses"][self.name] = "idle"
             shared_data["logs"][self.name].append({
                 "time": datetime.now().isoformat(),
                 "position": self.position,
+                "direction": shared_data["directions"][self.name],
                 "state": "idle",
                 "source": "simulation"
             })
 
 def simulation_once():
     """
-    20초 동안 (AGV 2,3,4)를 이동시키는 시뮬레이션을 한 번 실행.
+    원래는 AGV 2,3,4가 움직이도록 시뮬레이션하지만,  
+    여기서는 데모용으로 각 AGV의 값을 원하는 정적 값으로 업데이트합니다.
     """
-    env = simpy.Environment()
-
-    agv2 = AGV(env, "AGV 2", speed=1.5)
-    agv3 = AGV(env, "AGV 3", speed=1.2)
-    agv4 = AGV(env, "AGV 4", speed=2.0)
-
     with data_lock:
-        # 초기 상태
-        shared_data["statuses"]["AGV 2"] = "idle"
-        shared_data["statuses"]["AGV 3"] = "idle"
-        shared_data["statuses"]["AGV 4"] = "idle"
-
-    env.process(agv2.move((5, 5)))
-    env.process(agv3.move((3, 7)))
-    env.process(agv4.move((10, 2)))
-
-    env.run(until=20)
+        # AGV 2: (2,2), 방향 "R"
+        shared_data["statuses"]["AGV 2"] = "fine"
+        shared_data["positions"]["AGV 2"] = (2,2)
+        shared_data["directions"]["AGV 2"] = "R"
+        shared_data["logs"]["AGV 2"].append({
+            "time": datetime.now().isoformat(),
+            "position": (2,2),
+            "direction": "R",
+            "state": "fine",
+            "source": "simulation"
+        })
+        # AGV 3: (3,3), 방향 "U"
+        shared_data["statuses"]["AGV 3"] = "fine"
+        shared_data["positions"]["AGV 3"] = (3,3)
+        shared_data["directions"]["AGV 3"] = "U"
+        shared_data["logs"]["AGV 3"].append({
+            "time": datetime.now().isoformat(),
+            "position": (3,3),
+            "direction": "U",
+            "state": "fine",
+            "source": "simulation"
+        })
+        # AGV 4: (4,4), 방향 "D"
+        shared_data["statuses"]["AGV 4"] = "fine"
+        shared_data["positions"]["AGV 4"] = (4,4)
+        shared_data["directions"]["AGV 4"] = "D"
+        shared_data["logs"]["AGV 4"].append({
+            "time": datetime.now().isoformat(),
+            "position": (4,4),
+            "direction": "D",
+            "state": "fine",
+            "source": "simulation"
+        })
