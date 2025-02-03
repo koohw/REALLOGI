@@ -17,4 +17,6 @@ public class AGV {
 
     private Integer warehouseId;
 
+    private String footnote;
+
 }

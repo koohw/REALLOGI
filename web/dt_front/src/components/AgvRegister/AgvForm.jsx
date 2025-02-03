@@ -4,6 +4,7 @@ export default function AgvForm({ onSubmit }) {
   const [formData, setFormData] = useState({
     name: '',
     registrationId: '',
+    AgvModel: '',
     description: '',
     isConnected: false
   });
@@ -31,7 +32,7 @@ export default function AgvForm({ onSubmit }) {
           value={formData.name}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
-          placeholder="Value"
+          placeholder="Agv 이름"
           required
         />
       </div>
@@ -44,7 +45,20 @@ export default function AgvForm({ onSubmit }) {
           value={formData.registrationId}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
-          placeholder="Value"
+          placeholder="Agv ID"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Model</label>
+        <input
+          type="text"
+          name="AgvModel"
+          value={formData.AgvModel}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg"
+          placeholder="Agv 모델명"
           required
         />
       </div>
@@ -65,7 +79,7 @@ export default function AgvForm({ onSubmit }) {
           value={formData.description}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg h-32"
-          placeholder="Value"
+          placeholder="비고"
           required
         />
       </div>

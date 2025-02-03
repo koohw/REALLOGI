@@ -62,3 +62,6 @@ ALTER TABLE `agv_log` ADD CONSTRAINT `PK_AGV_LOG` PRIMARY KEY (
 	`log_id`
 );
 
+ALTER TABLE common_project.agv 
+ADD COLUMN agv_footnote VARCHAR(255) NULL DEFAULT NULL AFTER agv_model;
+
