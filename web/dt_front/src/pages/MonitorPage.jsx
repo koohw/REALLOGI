@@ -1,4 +1,5 @@
 import Sidebar from "../components/Sidebar";
+import AGVMap from "../components/AGVMap";
 
 function MonitorPage() {
   return (
@@ -11,6 +12,7 @@ function MonitorPage() {
       {/* 우측 메인 컨텐츠 영역 */}
       <div className="flex-1">
         <div>실시간 모니터링</div>
+        <AGVMap />
       </div>
     </div>
   );
