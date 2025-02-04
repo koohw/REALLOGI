@@ -24,6 +24,7 @@ public class AgvController {
     public BaseResponse<AGV> createAgv(@RequestBody AGV agv) {
         try {
             AGV createdAgv = agvService.createAgv(agv);
+
             return new BaseResponse<>(createdAgv);
         } catch (Exception e) {
             return new BaseResponse<>(BaseResponseStatus.DATABASE_ERROR);

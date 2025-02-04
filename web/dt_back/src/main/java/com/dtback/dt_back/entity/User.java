@@ -20,6 +20,5 @@ public class User {
     private String password;
     private String userName;
     private String phoneNumber;
-
     private Integer warehouseId;
 }

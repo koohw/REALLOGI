@@ -31,6 +31,7 @@ public class UserController {
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<String>> login(@RequestBody LoginRequestDto loginRequestDto) {
+
         return ResponseEntity.ok(userService.login(loginRequestDto));
     }
 

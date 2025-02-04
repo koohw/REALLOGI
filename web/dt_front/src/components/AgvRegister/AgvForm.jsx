@@ -1,26 +1,31 @@
 import { useState ,useEffect} from 'react';
 import axios from 'axios';
+import { useAuth } from '../../hooks/useAuth';
+
 
 export default function AgvForm({ onSubmit }) {
+
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
-    agv_name: '',
-    agv_code: '',
-    agv_model: '',
-    footnote: '',
-    warehouseId : ''
+    agvName: '',
+    agvCode: '',
+    agvModel: '',
+    agvFootnote: '',
+    warehouseId: ''
   });
   
 
   useEffect(() => {
-    // localStorage에서 warehouse_id 가져오기
-    const warehouse_id = localStorage.getItem('warehouse_id');
-    if (warehouse_id) {
+    // user 정보가 있을 때 warehouseId 설정
+    if (user && user.warehouseId) {
       setFormData(prev => ({
         ...prev,
-        warehouse_id: parseInt(warehouse_id)
+        warehouseId: user.warehouseId
       }));
     }
-  }, []);
+  }, [user]);
+  
+   
 
   const handleChange = (e) => {
     setFormData({
@@ -32,16 +37,27 @@ export default function AgvForm({ onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:8080/api/Agvs/register', formData);
+      const response = await axios.post('http://localhost:8080/api/Agvs/register', 
+        {
+          ...formData,
+          warehouseId: parseInt(formData.warehouseId)
+        },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       if (response.data.isSuccess) {
         alert('AGV가 성공적으로 등록되었습니다.');
         // 폼 초기화
         setFormData({
-          agv_name: '',
-          agv_code: '',
-          agv_model: '',
-          footnote: '',
-          warehouse_id: formData.warehouse_id
+          agvName: '',
+  agvCode: '',
+  agvModel: '',
+  agvFootnote: '',
+          warehouseId: formData.warehouseId
         });
       } else {
         alert(response.data.message);
@@ -58,8 +74,8 @@ export default function AgvForm({ onSubmit }) {
         <label className="block text-sm font-medium">Name</label>
         <input
           type="text"
-          name="agv_name"
-          value={formData.agv_name}
+          name="agvName"
+          value={formData.agvName}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
           placeholder="Agv 이름"
@@ -71,8 +87,8 @@ export default function AgvForm({ onSubmit }) {
         <label className="block text-sm font-medium">code</label>
         <input
           type="text"
-          name="agv_code"
-          value={formData.agv_code}
+          name="agvCode"
+          value={formData.agvCode}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg"
           placeholder="AGV 코드"
@@ -84,8 +100,8 @@ export default function AgvForm({ onSubmit }) {
         <label className="block text-sm font-medium">Model</label>
         <input
            type="text"
-           name="agv_model"
-           value={formData.agv_model}
+           name="agvModel"
+           value={formData.agvModel}
            onChange={handleChange}
            className="w-full p-2 border rounded-lg"
            placeholder="AGV 모델명"
@@ -96,8 +112,8 @@ export default function AgvForm({ onSubmit }) {
       <div className="space-y-2">
         <label className="block text-sm font-medium">비고</label>
         <textarea
-          name="footnote"
-          value={formData.footnote}
+          name="agvFootnote"
+          value={formData.agvFootnote}
           onChange={handleChange}
           className="w-full p-2 border rounded-lg h-32"
           placeholder="비고"
