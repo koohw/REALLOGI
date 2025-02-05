@@ -1,16 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
 import simpy
 from collections import deque, defaultdict
 import random
 import statistics
 import time
+import json
 
 app = Flask(__name__)
 
 ################################
 # 상수 정의
 ################################
-REPEAT_RUNS = 15          # 반복실험 횟수 (최적화 모드에서 사용)
+REPEAT_RUNS = 15          # 반복실험 횟수 (최종 결과용)
 WARMUP_PERIOD = 30        # 30초 이전 픽업은 통계에서 제외
 CHECK_INTERVAL = 3000     # 3000초마다 delivered_count 기록
 MOVE_RATE = 1.0           # 이동 대기 시간의 exponential 분포 파라미터 (평균 1초)
@@ -147,11 +148,11 @@ def agv_process(agv, env, stats, sim_duration, cell_blocked, speed, print_positi
                 path = bfs_path((int(agv.pos[0]), int(agv.pos[1])), target, env.now, cell_blocked, defaultdict(int))
                 agv.path = path if path is not None else []
         if len(agv.path) > 1:
-            next_cell = agv.path[1]  # 정수 튜플
+            next_cell = agv.path[1]
             current_pos = agv.pos
             dx = next_cell[0] - current_pos[0]
             dy = next_cell[1] - current_pos[1]
-            distance = (dx**2 + dy**2) ** 0.5
+            distance = (dx**2 + dy**2)**0.5
             num_steps = int(distance / STEP_SIZE)
             for i in range(num_steps):
                 current_pos = (current_pos[0] + STEP_SIZE * dx / distance,
@@ -170,18 +171,18 @@ def agv_process(agv, env, stats, sim_duration, cell_blocked, speed, print_positi
                 stats.agv_stats[agv.id]["location_log"].append((env.now, rounded_pos))
                 if print_positions:
                     print(f"[{env.now:.2f} sec] AGV{agv.id} 위치: {rounded_pos}")
-            agv.pos = (float(next_cell[0]), float(next_cell[1]))
+            agv.pos = (float(current_pos[0]), float(current_pos[1]))
             agv.path.pop(0)
         else:
             yield from controlled_timeout(env, 0.1, speed)
         if agv.pos in shelf_coords and agv.cargo == 0:
             yield env.process(do_pick(agv, env, stats, cell_blocked, speed))
             agv.path = []
-            yield from controlled_timeout(env, random.uniform(0.5, 1.5), speed)
+            yield from controlled_timeout(env, random.uniform(0.5,1.5), speed)
         elif agv.pos in exit_coords and agv.cargo == 1:
             yield env.process(do_drop(agv, env, stats, cell_blocked, speed))
             agv.path = []
-            yield from controlled_timeout(env, random.uniform(0.5, 1.5), speed)
+            yield from controlled_timeout(env, random.uniform(0.5,1.5), speed)
 
 ################################
 # 통계 기록 프로세스
@@ -199,21 +200,23 @@ def record_interval_stats(env, sim_duration, stats):
         t += CHECK_INTERVAL
 
 ################################
-# 단일 시뮬레이션 실행 함수 (1회, speed 인자 추가)
+# 단일 시뮬레이션 실행 함수 (1회, speed 인자 및 output_mode 추가)
 ################################
-def run_one_sim(agv_count, sim_duration, run_id=1, speed="max"):
+def run_one_sim(agv_count, sim_duration, run_id=1, speed="max", output_mode="live"):
     env = simpy.Environment()
     cell_blocked = {}
     stats = Stats()
     agvs = []
     start_row = 8
-    start_cols = [0, 2, 4, 6, 1, 3, 5]
+    start_cols = [0,2,4,6,1,3,5]
     for i in range(agv_count):
         pos = (start_row, start_cols[i % len(start_cols)])
         agv = AGV(i, pos)
         agvs.append(agv)
-    # 웹에서 전달받은 조건에 따라 print_positions 활성화
-    print_positions = True if agv_count >= 3 and speed != "max" else False
+    if output_mode == "final":
+        print_positions = False
+    else:
+        print_positions = True if agv_count >= 3 and speed != "max" else False
     for agv in agvs:
         env.process(agv_process(agv, env, stats, sim_duration, cell_blocked, speed, print_positions))
     env.process(record_stats(env, sim_duration, stats))
@@ -238,12 +241,12 @@ def run_one_sim(agv_count, sim_duration, run_id=1, speed="max"):
     return result
 
 ################################
-# 최적화 분석 함수 (speed 인자 전달)
+# 최적화 분석 함수 (simulate_for_agv_count)
 ################################
 def simulate_for_agv_count(agv_count, sim_duration, speed):
     run_results = []
     for run_id in range(1, REPEAT_RUNS+1):
-        res = run_one_sim(agv_count, sim_duration, run_id, speed)
+        res = run_one_sim(agv_count, sim_duration, run_id, speed, output_mode="final")
         run_results.append(res)
     delivered_counts = [res["delivered_count"] for res in run_results]
     avg_delivered = statistics.mean(delivered_counts)
@@ -261,6 +264,7 @@ def simulate_for_agv_count(agv_count, sim_duration, speed):
     avg_cycle = statistics.mean(all_cycle_times) if all_cycle_times else 0
     avg_wait = statistics.mean(all_wait_times) if all_wait_times else 0
     avg_travel = statistics.mean(all_travel_times) if all_travel_times else 0
+
     return {
         "agv_count": agv_count,
         "avg_delivered": avg_delivered,
@@ -273,7 +277,7 @@ def simulate_for_agv_count(agv_count, sim_duration, speed):
     }
 
 ################################
-# Flask 엔드포인트: 단일 시뮬레이션 실행
+# Flask 엔드포인트: 최종 결과 반환
 ################################
 @app.route('/simulate', methods=['GET'])
 def simulate_endpoint():
@@ -284,7 +288,6 @@ def simulate_endpoint():
         output = request.args.get('output', "live")
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
     if speed_str == "max":
         speed = "max"
     else:
@@ -294,16 +297,39 @@ def simulate_endpoint():
                 return jsonify({"error": "speed must be positive or 'max'"}), 400
         except:
             return jsonify({"error": "Invalid speed value"}), 400
-
-    # output 파라미터에 따라 실시간 위치 로그 포함 여부 결정
-    result = run_one_sim(agv_count, duration, run_id=1, speed=speed)
+    result = run_one_sim(agv_count, duration, run_id=1, speed=speed, output_mode=output)
     if output == "final":
         for agv in result["agv_stats"].values():
             agv["location_log"] = []  # 위치 로그 제거
     return jsonify(result)
 
 ################################
-# Flask 엔드포인트: 최적화 분석 실행
+# Flask 엔드포인트: 스트리밍 시뮬레이션 (실시간 업데이트)
+################################
+@app.route('/stream', methods=['GET'])
+def stream_endpoint():
+    try:
+        agv_count = int(request.args.get('agv_count', 3))
+        duration = int(request.args.get('duration', 3000))
+        speed_str = request.args.get('speed', "1")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    if speed_str == "max":
+        speed = "max"
+    else:
+        try:
+            speed = float(speed_str)
+            if speed <= 0:
+                return jsonify({"error": "speed must be positive or 'max'"}), 400
+        except:
+            return jsonify({"error": "Invalid speed value"}), 400
+    def event_stream():
+        for state in simulation_stream(agv_count, duration, speed):
+            yield f"data: {state}\n\n"
+    return Response(event_stream(), mimetype="text/event-stream")
+
+################################
+# Flask 엔드포인트: 최적화 분석
 ################################
 @app.route('/simulate_opt', methods=['GET'])
 def simulate_opt_endpoint():
@@ -314,7 +340,6 @@ def simulate_opt_endpoint():
         speed_str = request.args.get('speed', "1")
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
     if speed_str == "max":
         speed = "max"
     else:
@@ -324,7 +349,6 @@ def simulate_opt_endpoint():
                 return jsonify({"error": "speed must be positive or 'max'"}), 400
         except:
             return jsonify({"error": "Invalid speed value"}), 400
-
     results = []
     for agv_count in range(min_agv, max_agv+1):
         res = simulate_for_agv_count(agv_count, duration, speed)
@@ -332,7 +356,42 @@ def simulate_opt_endpoint():
     return jsonify({"optimization_results": results})
 
 ################################
-# 메인 실행
+# 스트리밍 시뮬레이션 제너레이터
+################################
+def simulation_stream(agv_count, sim_duration, speed):
+    env = simpy.Environment()
+    cell_blocked = {}
+    stats = Stats()
+    agvs = []
+    start_row = 8
+    start_cols = [0,2,4,6,1,3,5]
+    for i in range(agv_count):
+        pos = (start_row, start_cols[i % len(start_cols)])
+        agv = AGV(i, pos)
+        agvs.append(agv)
+    for agv in agvs:
+        env.process(agv_process(agv, env, stats, sim_duration, cell_blocked, speed, print_positions=True))
+    env.process(record_stats(env, sim_duration, stats))
+    env.process(record_interval_stats(env, sim_duration, stats))
+    
+    update_interval = 0.1
+    last_update_real = time.time()
+    while env.now < sim_duration:
+        env.run(until=env.now + update_interval)
+        state = {
+            "sim_time": round(env.now, 2),
+            "agv_positions": {agv.id: (round(agv.pos[0],2), round(agv.pos[1],2)) for agv in agvs},
+            "delivered_count": stats.delivered_count
+        }
+        yield json.dumps(state) + "\n"
+        if speed != "max":
+            elapsed = time.time() - last_update_real
+            sleep_time = max(0, update_interval/speed - elapsed)
+            time.sleep(sleep_time)
+            last_update_real = time.time()
+
+################################
+# Flask 메인 실행
 ################################
 if __name__ == "__main__":
     app.run(debug=True)
