@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: dt_back
+  datasource:
+    url: jdbc:mysql://localhost:3306/common_project?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: debug
