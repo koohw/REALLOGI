@@ -1,80 +1,118 @@
 import paho.mqtt.client as mqtt
 import json
 import time
-import random
+from simulation import MAP, ROWS, COLS, get_next_position  # simulation.py가 동일 디렉토리에 있어야 함
 
+# MQTT 브로커 및 토픽 설정
 BROKER = "broker.hivemq.com"
 PORT = 1883
-TOPIC_AGV_TO_SIMPY = "agv/status"      # AGV에서 보내는 상태 메시지 토픽
-TOPIC_SIMPY_TO_AGV = "simpy/commands"  # AGV에 전달할 명령 메시지 토픽
+TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 잿슨(디바이스)가 상태/ACK 메시지를 송신하는 토픽
+TOPIC_COMMAND_TO_DEVICE = "simpy/commands"   # 서버가 잿슨(디바이스)에게 명령을 송신하는 토픽
 
-# 수신 메시지 출력 간격 (초)
+# 초기 위치 및 목표 (시뮬레이터 기준)
+current_location = (8, 0)
+target_location = (0, 0)
+
 PRINT_INTERVAL = 1.0
-last_print_time = 0  # 마지막으로 메시지를 출력한 시간
+last_print_time = 0
 
-# MQTT 콜백 함수: 연결 시 실행
+# 통신 성공 여부 플래그 (초기에는 False)
+comm_success = False
+
+# MQTT 클라이언트 생성 (client_id를 명시하면 경고 해소에 도움이 될 수 있음)
+client = mqtt.Client(client_id="server_client", protocol=mqtt.MQTTv311)
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print(f"[Controller] MQTT 브로커에 성공적으로 연결됨 (rc={rc})")
+        print(f"[서버] MQTT 브로커와 연결 성공 (rc={rc}).")
+        print("[서버] 잿슨오린나노와의 통신 대기중...")
+        client.subscribe(TOPIC_STATUS_FROM_DEVICE)
     else:
-        print(f"[Controller] 연결 실패, 반환 코드 {rc}")
-    client.subscribe(TOPIC_AGV_TO_SIMPY)  # AGV 상태 메시지를 구독
+        print(f"[서버] MQTT 연결 실패, 반환 코드 {rc}")
 
-# MQTT 콜백 함수: 메시지 수신 시 실행
 def on_message(client, userdata, msg):
-    global last_print_time
+    """
+    잿슨(디바이스)에서 송신한 상태 또는 ACK 메시지를 처리합니다.
+    - 메시지에 'ack' 키가 있으면 이동 완료(ACK)로 인식하고 통신 성공 플래그를 설정합니다.
+    - 그 외 메시지는 통신 성공 후에만 출력합니다.
+    """
+    global current_location, last_print_time, comm_success
     try:
-        data = json.loads(msg.payload.decode())
+        message = json.loads(msg.payload.decode())
         current_time = time.time()
-        # 마지막 출력 이후 PRINT_INTERVAL 이상 경과한 경우에만 출력
         if current_time - last_print_time >= PRINT_INTERVAL:
-            print(f"[Controller] 수신한 AGV 상태: {data}")
+            if message.get("ack") is True:
+                comm_success = True
+                current_location = tuple(message.get("location", current_location))
+                print(f"[서버] 잿슨오린나노와 통신 성공: 이동 완료(ACK) 수신, 현재 위치: {current_location}")
+            else:
+                if comm_success:
+                    status_state = message.get("state", "unknown")
+                    location = message.get("location", current_location)
+                    obstacle = message.get("obstacle", None)
+                    qr_detected = message.get("qr_detected", None)
+                    print(f"[서버] 상태 메시지 수신 - 위치: {location}, 상태: {status_state}", end="")
+                    if obstacle is not None:
+                        print(f", 장애물 감지: {obstacle}", end="")
+                    if qr_detected is not None:
+                        print(f", QR 인식: {qr_detected}", end="")
+                    print()
             last_print_time = current_time
     except Exception as e:
-        print(f"[Controller] 메시지 디코딩 오류: {e}")
+        print(f"[서버] 메시지 처리 오류: {e}")
 
-# MQTT 클라이언트 생성 및 설정
-client = mqtt.Client(protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_message = on_message
 
+print("[서버] MQTT 클라이언트 연결 시도 중...")
 client.connect(BROKER, PORT, 60)
 client.loop_start()
 
-# 명령 발행 함수
 def send_command(command, data=None):
     """
-    command: "정지", "재개", "경로" 등
-    data: 명령에 따른 추가 데이터 (예: {"next_location": (x, y)})
+    서버가 잿슨(디바이스)로 명령을 전송하는 함수입니다.
+    예: '정지', '재개', '경로' 등의 명령을 전송
     """
     payload = {"command": command}
     if data is not None:
         payload["data"] = data
-    result = client.publish(TOPIC_SIMPY_TO_AGV, json.dumps(payload))
-    # publish()는 (result, mid)를 반환하며, result[0]==0이면 성공입니다.
+    result = client.publish(TOPIC_COMMAND_TO_DEVICE, json.dumps(payload))
     if result[0] == 0:
-        print(f"[Controller] 명령 전송 성공: {payload}")
+        print(f"[서버] 명령 전송 성공: {payload}")
     else:
-        print(f"[Controller] 명령 전송 실패: {payload}")
+        print(f"[서버] 명령 전송 실패: {payload}")
 
-# 컨트롤러 메인 루프 (예시: 주기적으로 명령을 발행)
-try:
+def publish_path_command():
+    """
+    시뮬레이션을 기반으로 잿슨(디바이스)로 '경로' 명령을 주기적으로 전송합니다.
+    - 현재 위치(current_location)와 목표(target_location)를 바탕으로 get_next_position()을 호출하여
+      다음 칸(next_location)을 계산합니다.
+    - 만약 다음 칸이 현재 위치와 동일하면(즉, 더 이상 이동 불가능) '정지' 명령을 발행합니다.
+    """
+    global current_location, target_location
     while True:
-        # 예시 1: AGV에 정지 명령 전송
-        send_command("정지")
-        time.sleep(5)
-        
-        # 예시 2: AGV에 재개 명령 전송
-        send_command("재개")
-        time.sleep(5)
-        
-        # 예시 3: AGV에 경로 명령 전송 (새로운 위치로 이동)
-        # 여기서는 랜덤 좌표를 예시로 사용합니다.
-        new_location = (random.randint(0, 8), random.randint(0, 6))
-        send_command("경로", {"next_location": new_location})
+        next_location = get_next_position(current_location, target_location)
+        # 한 칸 이동 조건: 현재와 다음 칸이 달라야 함
+        if next_location == current_location:
+            send_command("정지")
+        else:
+            # 잿슨측에서는 "경로" 명령 수신 시, 유효한 이동이면 current_location을 갱신하고 ACK를 보냅니다.
+            send_command("경로", {"next_location": list(next_location)})
         time.sleep(5)
 
-except KeyboardInterrupt:
-    print("[Controller] KeyboardInterrupt 발생. 컨트롤러 클라이언트를 종료합니다...")
-    client.loop_stop()
-    client.disconnect()
+def run_server_mqtt():
+    """
+    서버 측 MQTT 통신을 무한 실행합니다.
+    - 잿슨(디바이스)에서 송신한 메시지는 on_message() 콜백에서 처리됩니다.
+    - publish_path_command() 함수를 사용해 시뮬레이션 기반으로 경로 명령을 주기적으로 전송합니다.
+    """
+    try:
+        publish_path_command()
+    except KeyboardInterrupt:
+        print("[서버] KeyboardInterrupt 발생. MQTT 클라이언트를 종료합니다...")
+        client.loop_stop()
+        client.disconnect()
+        print("[서버] 종료합니다.")
+
+if __name__ == "__main__":
+    run_server_mqtt()

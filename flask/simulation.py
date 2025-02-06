@@ -1,14 +1,14 @@
+# simulation.py
 import simpy
 from datetime import datetime
 from threading import Lock
-import math
-import random
+from collections import deque
 
 # ------------------------------
-# MAP 및 관련 변수 정의
+# 맵 및 좌표 정의
 # ------------------------------
 MAP = [
-    [2, 2, 2, 2, 2, 2, 2],  # 도착지점 (출구)
+    [2, 2, 2, 2, 2, 2, 2],  # 출구 (0행)
     [0, 0, 0, 0, 0, 0, 0],
     [0, 1, 0, 1, 0, 1, 0],
     [0, 1, 0, 1, 0, 1, 0],
@@ -16,28 +16,30 @@ MAP = [
     [0, 1, 0, 1, 0, 1, 0],
     [0, 1, 0, 1, 0, 1, 0],
     [0, 0, 0, 0, 0, 0, 0],
-    [2, 2, 2, 2, 2, 2, 2]   # 출발지점
+    [2, 2, 2, 2, 2, 2, 2]   # 출발 (8행)
 ]
-
 ROWS = len(MAP)
 COLS = len(MAP[0])
 
-# 선반 좌표 (하역 구역) – 예시로 지정 (MAP상의 값은 0이지만, 해당 좌표는 하역 전용으로 취급)
-shelf_coords = [(2, 2), (2, 4), (2, 6), (5, 2), (5, 4), (5, 6)]
-# 출구 좌표: MAP의 첫 행에서 값이 2인 모든 열
+# 선반(하역) 좌표, 출구 좌표
+shelf_coords = [(2, 2), (2, 4), (2, 6),
+                (5, 2), (5, 4), (5, 6)]
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
 
-# 전역으로 선반 사용 여부를 관리 (선반 좌표가 사용 중이면 True)
+# 선반 사용 여부 관리 (True면 다른 AGV가 못 지나감)
 shelf_in_use = {coord: False for coord in shelf_coords}
 
-# 전역 공유 데이터 및 락 (모든 AGV의 상태, 위치 등을 기록)
+# ------------------------------
+# 전역 공유 데이터 / 락
+# ------------------------------
 data_lock = Lock()
+
 shared_data = {
     "positions": {
-        "AGV 1": (0, 0),
-        "AGV 2": (0, 0),
-        "AGV 3": (0, 0),
-        "AGV 4": (0, 0)
+        "AGV 1": (8, 0),   # 초기값 (시뮬레이터상)
+        "AGV 2": (8, 0),
+        "AGV 3": (8, 3),
+        "AGV 4": (8, 6)
     },
     "statuses": {
         "AGV 1": "idle",
@@ -56,55 +58,95 @@ shared_data = {
         "AGV 2": "N/A",
         "AGV 3": "N/A",
         "AGV 4": "N/A"
-    }
+    },
+    # --- [AGV1 이동 명령/ACK 상태] ---
+    "agv1_target": None,         # AGV1에게 "다음 칸" 명령을 내릴 때 기록
+    "agv1_moving_ack": False     # 잿슨(AGV1)이 해당 칸 도착을 보고하면 True
 }
 
+
 # ------------------------------
-# 함수: 사용 가능한 선반 좌표 선택
+# BFS 유틸 함수
 # ------------------------------
-def select_available_shelf():
+def get_neighbors(pos):
+    r, c = pos
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    neighbors = []
+    for dr, dc in directions:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < ROWS and 0 <= nc < COLS:
+            neighbors.append((nr, nc))
+    return neighbors
+
+def bfs_path(start, goal):
     """
-    shelf_coords 목록 중 현재 사용 중이지 않은 선반 좌표를 선택하여 반환합니다.
-    모두 사용 중이면 우선순위로 첫 번째 좌표를 반환합니다.
+    (start)->(goal) 까지의 경로를 BFS로 찾고,
+    경로 리스트를 반환. 못찾으면 [].
+    """
+    from collections import deque
+    queue = deque([start])
+    came_from = {start: None}
+
+    while queue:
+        current = queue.popleft()
+        if current == goal:
+            break
+        for nxt in get_neighbors(current):
+            # 장애물(1)은 못 지나감
+            if MAP[nxt[0]][nxt[1]] == 1:
+                continue
+            # 아직 방문 안한 칸만
+            if nxt not in came_from:
+                came_from[nxt] = current
+                queue.append(nxt)
+
+    # goal까지 못 갔으면 빈 리스트
+    if goal not in came_from:
+        return []
+
+    path = []
+    cur = goal
+    while cur is not None:
+        path.append(cur)
+        cur = came_from[cur]
+    path.reverse()
+    return path
+
+def get_next_position(current, target):
+    """
+    current에서 target까지 BFS 경로 중
+    '다음 칸'을 반환. 경로 없으면 current 그대로.
+    """
+    path = bfs_path(current, target)
+    if len(path) >= 2:
+        return path[1]
+    return current
+
+def select_available_shelf():
+    """ 
+    아직 사용 중이지 않은 선반 좌표를 하나 선택 
+    (모두 사용 중이면 맨 첫번째 반환)
     """
     for coord in shelf_coords:
-        if not shelf_in_use.get(coord, False):
+        if not shelf_in_use[coord]:
             return coord
     return shelf_coords[0]
 
-# ------------------------------
-# 함수: 인접 셀 중 목표와의 맨해튼 거리가 줄어드는 셀 선택
-# ------------------------------
-def get_next_position(current, target):
-    """
-    현재 위치 current (row, col)에서 목표 target까지 이동할 때,
-    상하좌우 인접 셀 중 MAP 값이 0 또는 2인 셀(통로나 출발/도착 영역)만 고려하여,
-    현재 위치와의 맨해튼 거리가 기준이 되어 목표까지의 거리가 줄어드는 셀을 후보로 선택합니다.
-    단, 후보가 선반 좌표에 해당하고 해당 선반이 사용 중이면 후보에서 제외합니다.
-    후보가 없으면 현재 위치를 반환합니다.
-    """
-    if current == target:
-        return current
 
-    r, c = current
-    tr, tc = target
-    current_dist = abs(r - tr) + abs(c - tc)
-    candidates = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
-    valid_moves = []
-    for nr, nc in candidates:
-        if 0 <= nr < ROWS and 0 <= nc < COLS:
-            if MAP[nr][nc] == 1:
-                continue
-            # 만약 후보가 선반 좌표인데 이미 사용 중이면 제외 (단, 목표가 해당 선반이면 허용)
-            if (nr, nc) in shelf_coords and shelf_in_use.get((nr, nc), False) and (nr, nc) != target:
-                continue
-            new_dist = abs(nr - tr) + abs(nc - tc)
-            if new_dist < current_dist:
-                valid_moves.append(((nr, nc), new_dist))
-    if not valid_moves:
-        return current
-    best_move = min(valid_moves, key=lambda x: x[1])[0]
-    return best_move
+# ------------------------------
+# (placeholder) AGV1 명령 전송 함수
+# 실제론 mqtt_client.publish(...)
+# ------------------------------
+def send_command_to_agv1(next_pos):
+    """
+    실제 환경:
+      mqtt_client.publish("simpy/commands", json.dumps({
+          "command": "경로",
+          "data": {"next_location": next_pos}
+      }))
+    """
+    print(f"[SIM] (placeholder) send_command_to_agv1(next_pos={next_pos})")
+
 
 # ------------------------------
 # AGV 클래스
@@ -112,12 +154,12 @@ def get_next_position(current, target):
 class AGV:
     def __init__(self, env, name, speed, start, shelf_target, exit_target):
         """
-        :param env: SimPy 환경
-        :param name: AGV 이름 (예: "AGV 2")
-        :param speed: 이동 속도 (초당 이동 횟수)
-        :param start: 출발지점 좌표 (row, col)
-        :param shelf_target: 하역(선반) 좌표 (row, col)
-        :param exit_target: 도착지(출구) 좌표 (row, col)
+        env: simpy Environment
+        name: AGV 이름 (문자열)
+        speed: 이동 속도 (초당 1칸을 (1/speed)초에 이동)
+        start: (row, col) 시작 좌표
+        shelf_target: 하역(선반) 좌표
+        exit_target: 출구 좌표
         """
         self.env = env
         self.name = name
@@ -125,177 +167,228 @@ class AGV:
         self.start = start
         self.shelf_target = shelf_target
         self.exit_target = exit_target
+
         self.position = start
-        self.phase = "to_shelf"  # "to_shelf" → 하역 → "to_exit" 로 전환
-        self.unloaded = False   # 하역 여부
+        self.phase = "to_shelf"  # "to_shelf"->하역->"to_exit"->출구->반복
+        self.unloaded = False
 
     def move(self):
-        # 초기 상태 기록
-        with data_lock:
-            shared_data["statuses"][self.name] = "moving"
-            shared_data["positions"][self.name] = self.position
-            shared_data["logs"][self.name].append({
-                "time": datetime.now().isoformat(),
-                "position": self.position,
-                "direction": "start",
-                "state": "moving",
-                "source": "simulation"
-            })
+        # AGV1과 AGV2..4 로직 분기
+        if self.name == "AGV 1":
+            while True:
+                # 출구 도착하면 idle 후 리셋
+                if (self.phase == "to_exit") and (self.position == self.exit_target):
+                    with data_lock:
+                        shared_data["statuses"][self.name] = "idle"
+                        shared_data["logs"][self.name].append({
+                            "time": datetime.now().isoformat(),
+                            "position": self.position,
+                            "direction": "reset",
+                            "state": "idle",
+                            "source": "simulation"
+                        })
+                    yield self.env.timeout(2)
 
-        # 첫 번째 목표: 선반(하역) 지점으로 이동
-        current_target = self.shelf_target
+                    # 시작점 복귀, 선반 다시 선택
+                    self.position = self.start
+                    self.phase = "to_shelf"
+                    new_shelf = select_available_shelf()
+                    self.shelf_target = new_shelf
+                    continue
 
-        while self.position != current_target:
-            next_pos = get_next_position(self.position, current_target)
-            if next_pos == self.position:
-                with data_lock:
-                    shared_data["statuses"][self.name] = "stop"
-                    shared_data["logs"][self.name].append({
-                        "time": datetime.now().isoformat(),
-                        "position": self.position,
-                        "direction": "none",
-                        "state": "stop",
-                        "source": "simulation"
-                    })
-                yield self.env.timeout(1)
-                continue
+                # 현재 목표
+                if self.phase == "to_shelf":
+                    current_target = self.shelf_target
+                else:
+                    current_target = self.exit_target
 
-            self.position = next_pos
-            # 이동한 방향을 단순 비교로 판별 (필요 시 개선)
-            r, c = self.position
-            tr, tc = current_target
-            if r < tr:
-                direction = "D"
-            elif r > tr:
-                direction = "U"
-            elif c < tc:
-                direction = "R"
-            elif c > tc:
-                direction = "L"
-            else:
-                direction = "N/A"
+                if self.position != current_target:
+                    # 다음 칸
+                    next_pos = get_next_position(self.position, current_target)
+                    if next_pos == self.position:
+                        # 더 이상 못가면 stop
+                        with data_lock:
+                            shared_data["statuses"][self.name] = "stop"
+                            shared_data["logs"][self.name].append({
+                                "time": datetime.now().isoformat(),
+                                "position": self.position,
+                                "direction": "none",
+                                "state": "stop",
+                                "source": "simulation"
+                            })
+                        yield self.env.timeout(1)
+                        continue
 
-            with data_lock:
-                shared_data["positions"][self.name] = self.position
-                shared_data["directions"][self.name] = direction
-                shared_data["statuses"][self.name] = "moving"
-                shared_data["logs"][self.name].append({
-                    "time": datetime.now().isoformat(),
-                    "position": self.position,
-                    "direction": direction,
-                    "state": "moving",
-                    "source": "simulation"
-                })
+                    # 1) MQTT 명령 전송 (placeholder)
+                    with data_lock:
+                        shared_data["agv1_target"] = next_pos
+                        shared_data["agv1_moving_ack"] = False
+                    send_command_to_agv1(next_pos)
 
-            yield self.env.timeout(1 / self.speed)
+                    # 2) 잿슨 이동 완료 ack 대기
+                    ack_received = False
+                    while not ack_received:
+                        yield self.env.timeout(0.2)  # 0.2초마다 ack 확인
+                        with data_lock:
+                            if shared_data["agv1_moving_ack"]:
+                                ack_received = True
 
-        # 선반(하역) 구역에 도착한 경우 처리
-        if self.phase == "to_shelf":
-            # 해당 선반 좌표를 사용 중으로 표시
-            shelf_in_use[self.position] = True
-            with data_lock:
-                shared_data["statuses"][self.name] = "unloading"
-                shared_data["logs"][self.name].append({
-                    "time": datetime.now().isoformat(),
-                    "position": self.position,
-                    "direction": "N/A",
-                    "state": "unloading",
-                    "source": "simulation"
-                })
-            # 10초간 하역 대기 (그 동안 해당 선반 구역은 다른 AGV가 지나갈 수 없음)
-            yield self.env.timeout(10)
-            # 하역 완료 후 선반 좌표 사용 해제
-            shelf_in_use[self.position] = False
-            self.unloaded = True
-            # 전환: 다음 목표는 도착지(출구)
-            self.phase = "to_exit"
-            current_target = self.exit_target
+                    # 3) ack 받았으면 시뮬레이터 내 position 동기화
+                    with data_lock:
+                        self.position = shared_data["positions"][self.name]
+                        shared_data["directions"][self.name] = "R"  # 예시
+                        shared_data["statuses"][self.name] = "moving"
+                        shared_data["logs"][self.name].append({
+                            "time": datetime.now().isoformat(),
+                            "position": self.position,
+                            "direction": "R",
+                            "state": "moving",
+                            "source": "simulation"
+                        })
 
-        # 두 번째 목표: 도착지(출구)로 이동
-        while self.position != current_target:
-            next_pos = get_next_position(self.position, current_target)
-            if next_pos == self.position:
-                with data_lock:
-                    shared_data["statuses"][self.name] = "stop"
-                    shared_data["logs"][self.name].append({
-                        "time": datetime.now().isoformat(),
-                        "position": self.position,
-                        "direction": "none",
-                        "state": "stop",
-                        "source": "simulation"
-                    })
-                yield self.env.timeout(1)
-                continue
+                    yield self.env.timeout(1 / self.speed)
 
-            self.position = next_pos
-            r, c = self.position
-            tr, tc = current_target
-            if r < tr:
-                direction = "D"
-            elif r > tr:
-                direction = "U"
-            elif c < tc:
-                direction = "R"
-            elif c > tc:
-                direction = "L"
-            else:
-                direction = "N/A"
+                else:
+                    # 목표 도달
+                    if self.phase == "to_shelf":
+                        # 선반 도착 → 하역
+                        with data_lock:
+                            shelf_in_use[self.position] = True
+                            shared_data["statuses"][self.name] = "unloading"
+                            shared_data["logs"][self.name].append({
+                                "time": datetime.now().isoformat(),
+                                "position": self.position,
+                                "direction": "N/A",
+                                "state": "unloading",
+                                "source": "simulation"
+                            })
+                        yield self.env.timeout(10)  # 10초 하역
+                        with data_lock:
+                            shelf_in_use[self.position] = False
+                        self.unloaded = True
+                        self.phase = "to_exit"
+                    else:
+                        # 출구거나 등등
+                        yield self.env.timeout(1)
 
-            with data_lock:
-                shared_data["positions"][self.name] = self.position
-                shared_data["directions"][self.name] = direction
-                shared_data["statuses"][self.name] = "moving"
-                shared_data["logs"][self.name].append({
-                    "time": datetime.now().isoformat(),
-                    "position": self.position,
-                    "direction": direction,
-                    "state": "moving",
-                    "source": "simulation"
-                })
+        else:
+            # AGV 2,3,4 로직 (즉시 한칸 이동)
+            while True:
+                if (self.phase == "to_exit") and (self.position == self.exit_target):
+                    with data_lock:
+                        shared_data["statuses"][self.name] = "idle"
+                        shared_data["logs"][self.name].append({
+                            "time": datetime.now().isoformat(),
+                            "position": self.position,
+                            "direction": "reset",
+                            "state": "idle",
+                            "source": "simulation"
+                        })
+                    yield self.env.timeout(2)
 
-            yield self.env.timeout(1 / self.speed)
+                    # 리셋
+                    self.position = self.start
+                    self.phase = "to_shelf"
+                    new_shelf = select_available_shelf()
+                    self.shelf_target = new_shelf
+                    continue
 
-        # 도착지(출구)에 도달하면 idle 상태로 전환
-        with data_lock:
-            shared_data["statuses"][self.name] = "idle"
-            shared_data["logs"][self.name].append({
-                "time": datetime.now().isoformat(),
-                "position": self.position,
-                "direction": shared_data["directions"][self.name],
-                "state": "idle",
-                "source": "simulation"
-            })
+                if self.phase == "to_shelf":
+                    current_target = self.shelf_target
+                else:
+                    current_target = self.exit_target
 
-# ------------------------------
-# simulation_once 함수: 데모용 시뮬레이션 실행
-# ------------------------------
-def simulation_once():
+                if self.position != current_target:
+                    next_pos = get_next_position(self.position, current_target)
+                    if next_pos == self.position:
+                        with data_lock:
+                            shared_data["statuses"][self.name] = "stop"
+                            shared_data["logs"][self.name].append({
+                                "time": datetime.now().isoformat(),
+                                "position": self.position,
+                                "direction": "none",
+                                "state": "stop",
+                                "source": "simulation"
+                            })
+                        yield self.env.timeout(1)
+                        continue
+
+                    # 한 칸 즉시 이동
+                    self.position = next_pos
+                    # 방향 판별 (단순)
+                    r, c = self.position
+                    tr, tc = current_target
+                    if r < tr:
+                        direction = "D"
+                    elif r > tr:
+                        direction = "U"
+                    elif c < tc:
+                        direction = "R"
+                    elif c > tc:
+                        direction = "L"
+                    else:
+                        direction = "N/A"
+
+                    with data_lock:
+                        shared_data["positions"][self.name] = self.position
+                        shared_data["directions"][self.name] = direction
+                        shared_data["statuses"][self.name] = "moving"
+                        shared_data["logs"][self.name].append({
+                            "time": datetime.now().isoformat(),
+                            "position": self.position,
+                            "direction": direction,
+                            "state": "moving",
+                            "source": "simulation"
+                        })
+                    yield self.env.timeout(1 / self.speed)
+                else:
+                    # 목표 도달 (선반→하역 or 출구→idle)
+                    if self.phase == "to_shelf":
+                        with data_lock:
+                            shelf_in_use[self.position] = True
+                            shared_data["statuses"][self.name] = "unloading"
+                            shared_data["logs"][self.name].append({
+                                "time": datetime.now().isoformat(),
+                                "position": self.position,
+                                "direction": "N/A",
+                                "state": "unloading",
+                                "source": "simulation"
+                            })
+                        yield self.env.timeout(10)  # 하역
+                        with data_lock:
+                            shelf_in_use[self.position] = False
+                        self.unloaded = True
+                        self.phase = "to_exit"
+                    else:
+                        yield self.env.timeout(1)
+
+
+def simulation_run():
     """
-    데모용: AGV 2, AGV 3, AGV 4가
-      - 출발지점(출발지: MAP의 9번째 행)에서
-      - 각자의 선반(하역) 지점(사용 가능한 선반 좌표 중 선택)에 도착하여 10초 동안 하역 후
-      - 도착지(출구: MAP의 첫 행)로 이동하도록 시뮬레이션합니다.
-    
-    예시)
-      - AGV 2: 시작 (8, 0) → 선반 (사용 가능한 좌표 중 하나) → 도착 (0, 2)
-      - AGV 3: 시작 (8, 3) → 선반 (사용 가능한 좌표 중 하나) → 도착 (0, 4)
-      - AGV 4: 시작 (8, 6) → 선반 (사용 가능한 좌표 중 하나) → 도착 (0, 6)
+    시뮬레이션 실행 함수.
+    Flask 등에서 threading으로 호출하거나, 
+    메인에서 직접 호출해서 실행 가능.
     """
+    import threading
+
     env = simpy.Environment()
 
-    # 각 AGV에 대해 출발, 도착 좌표는 지정하고, 선반(하역) 좌표는 실행 시 사용 가능한 좌표를 선택합니다.
+    # AGV들 생성
+    agv1 = AGV(env, "AGV 1", speed=1, start=(8, 0), shelf_target=None, exit_target=(0, 0))
     agv2 = AGV(env, "AGV 2", speed=1, start=(8, 0), shelf_target=None, exit_target=(0, 2))
     agv3 = AGV(env, "AGV 3", speed=1, start=(8, 3), shelf_target=None, exit_target=(0, 4))
     agv4 = AGV(env, "AGV 4", speed=1, start=(8, 6), shelf_target=None, exit_target=(0, 6))
-    
-    # AGV 생성 시, 만약 shelf_target이 None이면 사용 가능한 선반 좌표를 선택합니다.
-    for agv in [agv2, agv3, agv4]:
+
+    for agv in [agv1, agv2, agv3, agv4]:
         if agv.shelf_target is None:
             agv.shelf_target = select_available_shelf()
 
+    env.process(agv1.move())
     env.process(agv2.move())
     env.process(agv3.move())
     env.process(agv4.move())
 
-    # 60초 동안 시뮬레이션 실행 (필요에 따라 조절 가능)
-    env.run(until=60)
+    try:
+        env.run()
+    except KeyboardInterrupt:
+        print("[Simulation] KeyboardInterrupt, 종료합니다.")
