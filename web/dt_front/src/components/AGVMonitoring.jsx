@@ -243,99 +243,101 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   }, [agvData, CELL_SIZE]);
 
   return (
-    <div className="p-4 border rounded-lg bg-white shadow-lg">
-      {/* Controls */}
-      <div className="space-y-4 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span
-            className={`px-3 py-1 rounded-full text-sm ${
-              connectionStatus === "연결됨"
-                ? "bg-green-100 text-green-800"
-                : connectionStatus === "연결 중..."
-                ? "bg-yellow-100 text-yellow-800"
-                : "bg-red-100 text-red-800"
-            }`}
+    <div className="p-3 border rounded-lg bg-white shadow-lg">
+      {/* Compact Controls Row */}
+      <div className="flex items-center gap-3 mb-3">
+        {/* Connection Status */}
+        <span
+          className={`px-2 py-0.5 rounded-full text-xs ${
+            connectionStatus === "연결됨"
+              ? "bg-green-100 text-green-800"
+              : connectionStatus === "연결 중..."
+              ? "bg-yellow-100 text-yellow-800"
+              : "bg-red-100 text-red-800"
+          }`}
+        >
+          {connectionStatus}
+        </span>
+
+        {/* AGV Count */}
+        <div className="flex items-center text-sm">
+          <span className="mr-1">AGV:</span>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            value={agvCount}
+            onChange={handleAgvCountChange}
+            className="w-16 px-1.5 py-0.5 border rounded text-sm"
+          />
+        </div>
+
+        {/* Speed Selection */}
+        <div className="flex items-center text-sm">
+          <span className="mr-1">Speed:</span>
+          <select
+            value={speed}
+            onChange={handleSpeedChange}
+            className="w-16 px-1.5 py-0.5 border rounded text-sm"
+            disabled={connectionStatus !== "연결됨"}
           >
-            {connectionStatus}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={requestAnalysis}
-              className="px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={connectionStatus !== "연결됨" || isAnalyzing}
-            >
-              {isAnalyzing ? (
-                <>
-                  <svg
-                    className="animate-spin h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  분석중...
-                </>
-              ) : (
-                "즉시 분석"
-              )}
-            </button>
-            <button
-              onClick={toggleSimulation}
-              className={`px-4 py-2 rounded-md ${
-                isRunning ? "bg-red-500" : "bg-green-500"
-              } text-white`}
-              disabled={connectionStatus !== "연결됨"}
-            >
-              {isRunning ? "Stop" : "Start"}
-            </button>
-          </div>
+            <option value={1}>1x</option>
+            <option value={2}>2x</option>
+            <option value={4}>4x</option>
+            <option value={8}>8x</option>
+            <option value={16}>16x</option>
+          </select>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <label className="flex items-center">
-            <span className="mr-2">AGV Count:</span>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={agvCount}
-              onChange={handleAgvCountChange}
-              className="w-20 px-2 py-1 border rounded"
-            />
-          </label>
-
-          <label className="flex items-center">
-            <span className="mr-2">Speed:</span>
-            <select
-              value={speed}
-              onChange={handleSpeedChange}
-              className="w-24 px-2 py-1 border rounded"
-              disabled={connectionStatus !== "연결됨"}
-            >
-              <option value={1}>1x</option>
-              <option value={2}>2x</option>
-              <option value={4}>4x</option>
-              <option value={8}>8x</option>
-              <option value={16}>16x</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="text-sm text-gray-600">
+        {/* Current AGVs info */}
+        <div className="text-xs text-gray-600">
           Current AGVs: {agvData.agv_count || 0}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={requestAnalysis}
+            className="px-2 py-1 rounded text-sm bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            disabled={connectionStatus !== "연결됨" || isAnalyzing}
+          >
+            {isAnalyzing ? (
+              <>
+                <svg
+                  className="animate-spin h-3 w-3 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                분석중
+              </>
+            ) : (
+              "즉시 분석"
+            )}
+          </button>
+          <button
+            onClick={toggleSimulation}
+            className={`px-2 py-1 rounded text-sm ${
+              isRunning ? "bg-red-500" : "bg-green-500"
+            } text-white hover:opacity-90`}
+            disabled={connectionStatus !== "연결됨"}
+          >
+            {isRunning ? "Stop" : "Start"}
+          </button>
         </div>
       </div>
 
