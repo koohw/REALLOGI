@@ -1,0 +1,22 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://mysql-container:3306/aiot?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${AWSDB_USERNAME}
+    password: ${AWSDB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    org:
+      hibernate:
+        SQL: debug
