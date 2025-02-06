@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>시뮬레이터 클라이언트</title>
+  <!-- integrity 속성을 제거한 socket.io 클라이언트 라이브러리 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>시뮬레이터 클라이언트 (A안)</h1>
+  <div id="log" style="white-space: pre-wrap; border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll;"></div>
+  
+  <button id="start-stream">실시간 시뮬레이션 시작</button>
+  <button id="request-final">최종 결과 요청</button>
+  
+  <div style="margin-top:20px;">
+    <h3>실시간 속도 업데이트 (A안)</h3>
+    <input type="number" id="speed-input" placeholder="새 속도 (예: 1, 4)" step="0.1" value="1">
+    <button id="update-speed">속도 업데이트</button>
+  </div>
+  
+  <script>
+    // 서버 주소와 포트 (로컬 테스트라면 localhost 사용)
+    const socket = io("http://localhost:5000");
+    const logDiv = document.getElementById("log");
+
+    function log(message) {
+      console.log(message);
+      logDiv.innerText += message + "\n";
+    }
+
+    // 연결되면
+    socket.on("connect", () => {
+      log("서버에 연결되었습니다.");
+    });
+
+    // 서버 상태 메시지
+    socket.on("status", (data) => {
+      log("상태: " + JSON.stringify(data));
+    });
+
+    // 실시간 시뮬레이션 업데이트 이벤트 (1초마다)
+    socket.on("simulation_update", (data) => {
+      log("실시간 업데이트: " + JSON.stringify(data));
+    });
+
+    // 최종 결과 이벤트
+    socket.on("simulation_final", (data) => {
+      log("최종 결과: " + JSON.stringify(data));
+    });
+
+    // 오류 이벤트
+    socket.on("error", (data) => {
+      log("오류: " + JSON.stringify(data));
+    });
+
+    // 실시간 시뮬레이션 시작 버튼 클릭 시
+    document.getElementById("start-stream").addEventListener("click", () => {
+      socket.emit("simulate_stream", { agv_count: 3, duration: 30, initial_speed: "1" });
+      log("실시간 시뮬레이션 요청을 보냈습니다. (배속 1)");
+    });
+
+    // 최종 결과 요청 버튼 클릭 시
+    document.getElementById("request-final").addEventListener("click", () => {
+      socket.emit("simulate_final", { agv_count: 3, duration: 30, initial_speed: "1", output: "final" });
+      log("최종 결과 요청을 보냈습니다.");
+    });
+
+    // 속도 업데이트 버튼 클릭 시 (실시간으로 배속 변경)
+    document.getElementById("update-speed").addEventListener("click", () => {
+      const newSpeed = document.getElementById("speed-input").value;
+      socket.emit("update_speed", { speed: newSpeed });
+      log("속도 업데이트 요청: " + newSpeed);
+    });
+  </script>
+</body>
+</html>
