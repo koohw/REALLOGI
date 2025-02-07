@@ -1,9 +1,0 @@
-spring:
-  application:
-    name: dt_back
-
-logging:
-  level:
-    org:
-      hibernate:
-        SQL: debug
