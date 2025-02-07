@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>시뮬레이터 클라이언트</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    body { font-family: sans-serif; }
+    #log {
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 300px;
+      overflow-y: scroll;
+    }
+    #final-results {
+      margin-top: 20px;
+      border: 1px solid #666;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+    #report {
+      margin-top: 20px;
+      border: 1px solid #666;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>시뮬레이터 클라이언트</h1>
+  <div>
+    <label>AGV 개수: <input type="number" id="agv-count" value="4" min="1"></label>
+    <label>종료 시간(초): <input type="number" id="duration" value="30" min="1"></label>
+    <label>초기 배속: <input type="number" id="initial-speed" value="1" step="0.1"></label>
+    <button id="start-stream">실시간 시뮬레이션 시작</button>
+  </div>
+
+  <div style="margin-top:10px;">
+    <button id="request-final">최종 결과 요청</button>
+    <button id="request-report">실시간 리포트 요청</button>
+  </div>
+
+  <div style="margin-top:20px;">
+    <h3>실시간 속도 업데이트</h3>
+    <input type="number" id="speed-input" placeholder="새 배속 (예: 1, 4, 100)" step="0.1" value="1">
+    <button id="update-speed">배속 업데이트</button>
+  </div>
+
+  <!-- 실시간 로그 출력 영역 -->
+  <h3>실시간 로그</h3>
+  <div id="log"></div>
+
+  <!-- 최종 결과 출력 영역 -->
+  <h3>최종 결과</h3>
+  <div id="final-results"></div>
+
+  <!-- 실시간 리포트 출력 영역 (새로 추가) -->
+  <h3>실시간 리포트</h3>
+  <div id="report"></div>
+
+  <script>
+    const socket = io("http://localhost:5000");
+    const logDiv = document.getElementById("log");
+    const resultsDiv = document.getElementById("final-results");
+    const reportDiv = document.getElementById("report");
+
+    // 로그 표시 함수
+    function log(message) {
+      console.log(message);
+      logDiv.innerText += message + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // 소켓 연결 완료
+    socket.on("connect", () => {
+      log("서버에 연결되었습니다.");
+    });
+
+    // 서버 status 수신 → 로그에 출력
+    socket.on("status", (data) => {
+      log("상태: " + JSON.stringify(data));
+    });
+
+    // 실시간 시뮬레이션 업데이트 수신 → 로그에 출력
+    socket.on("simulation_update", (data) => {
+      log("실시간 업데이트: " + JSON.stringify(data));
+    });
+
+    // 최종 결과 수신 → #final-results 영역에 표시
+    socket.on("simulation_final", (data) => {
+      log("최종 결과 수신");
+      resultsDiv.innerText = JSON.stringify(data, null, 2);
+    });
+
+    // 에러 수신 → 로그에 출력
+    socket.on("error", (data) => {
+      log("오류: " + JSON.stringify(data));
+    });
+
+    // 실시간 리포트 수신 → #report 영역에 표시(기존 내용 덮어쓰기)
+    socket.on("simulation_report", (data) => {
+      // 이전 리포트 내용은 지우고 새 리포트만 표시
+      reportDiv.innerText = "실시간 리포트:\n" + JSON.stringify(data, null, 2);
+    });
+
+    // 실시간 시뮬레이션 시작 버튼
+    document.getElementById("start-stream").addEventListener("click", () => {
+      const agvCount = document.getElementById("agv-count").value;
+      const duration = document.getElementById("duration").value;
+      const initialSpeed = document.getElementById("initial-speed").value;
+      socket.emit("simulate_stream", { agv_count: agvCount, duration: duration, initial_speed: initialSpeed });
+      log(`실시간 시뮬레이션 요청: AGV 개수=${agvCount}, 종료 시간=${duration}초, 배속=${initialSpeed}`);
+    });
+
+    // 최종 결과 요청 버튼
+    document.getElementById("request-final").addEventListener("click", () => {
+      const agvCount = document.getElementById("agv-count").value;
+      const duration = document.getElementById("duration").value;
+      const initialSpeed = document.getElementById("initial-speed").value;
+      socket.emit("simulate_final", { agv_count: agvCount, duration: duration, initial_speed: initialSpeed, output: "final" });
+      log("최종 결과 요청을 보냈습니다.");
+    });
+
+    // 실시간 리포트 요청 버튼
+    document.getElementById("request-report").addEventListener("click", () => {
+      socket.emit("report", {});
+      log("실시간 리포트 요청을 보냈습니다.");
+    });
+
+    // 배속 업데이트 버튼
+    document.getElementById("update-speed").addEventListener("click", () => {
+      const newSpeed = document.getElementById("speed-input").value;
+      socket.emit("update_speed", { speed: newSpeed });
+      log("배속 업데이트 요청: " + newSpeed);
+    });
+  </script>
+</body>
+</html>
