@@ -1,13 +1,13 @@
 import paho.mqtt.client as mqtt
 import json
 import time
-from simulation import MAP, ROWS, COLS, get_next_position  # simulation.py가 동일 디렉토리에 있어야 함
+from simulation import map_data, ROWS, COLS, send_command_to_agv1, get_next_position  # simulation.py가 동일 디렉토리에 있어야 함
 
 # MQTT 브로커 및 토픽 설정
 BROKER = "broker.hivemq.com"
 PORT = 1883
 TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 잿슨(디바이스)가 상태/ACK 메시지를 송신하는 토픽
-TOPIC_COMMAND_TO_DEVICE = "simpy/commands"   # 서버가 잿슨(디바이스)에게 명령을 송신하는 토픽
+TOPIC_COMMAND_TO_DEVICE = "simpy/commands"    # 서버가 잿슨(디바이스)에게 명령을 송신하는 토픽
 
 # 초기 위치 및 목표 (시뮬레이터 기준)
 current_location = (8, 0)
@@ -18,6 +18,9 @@ last_print_time = 0
 
 # 통신 성공 여부 플래그 (초기에는 False)
 comm_success = False
+
+# 전역 콜백 함수 변수 (MQTT ACK 메시지 처리 시 호출할 함수)
+mqtt_callback = None
 
 # MQTT 클라이언트 생성 (client_id를 명시하면 경고 해소에 도움이 될 수 있음)
 client = mqtt.Client(client_id="server_client", protocol=mqtt.MQTTv311)
@@ -36,15 +39,20 @@ def on_message(client, userdata, msg):
     - 메시지에 'ack' 키가 있으면 이동 완료(ACK)로 인식하고 통신 성공 플래그를 설정합니다.
     - 그 외 메시지는 통신 성공 후에만 출력합니다.
     """
-    global current_location, last_print_time, comm_success
+    global current_location, last_print_time, comm_success, mqtt_callback
     try:
         message = json.loads(msg.payload.decode())
         current_time = time.time()
         if current_time - last_print_time >= PRINT_INTERVAL:
             if message.get("ack") is True:
                 comm_success = True
-                current_location = tuple(message.get("location", current_location))
-                print(f"[서버] 잿슨오린나노와 통신 성공: 이동 완료(ACK) 수신, 현재 위치: {current_location}")
+                new_location = tuple(message.get("location", current_location))
+                current_location = new_location
+                print(f"[서버] 잿슨오린나노와 통신 성공: 이동 완료(ACK) 수신, 현재 위치: {new_location}")
+                # 등록된 콜백 함수가 있다면 호출 (예: AGV1 업데이트 처리)
+                if mqtt_callback is not None:
+                    state = message.get("state", "moving")
+                    mqtt_callback(1, new_location, state)
             else:
                 if comm_success:
                     status_state = message.get("state", "unknown")
@@ -96,16 +104,17 @@ def publish_path_command():
         if next_location == current_location:
             send_command("정지")
         else:
-            # 잿슨측에서는 "경로" 명령 수신 시, 유효한 이동이면 current_location을 갱신하고 ACK를 보냅니다.
             send_command("경로", {"next_location": list(next_location)})
         time.sleep(5)
 
-def run_server_mqtt():
+def run_server_mqtt(callback=None):
     """
     서버 측 MQTT 통신을 무한 실행합니다.
-    - 잿슨(디바이스)에서 송신한 메시지는 on_message() 콜백에서 처리됩니다.
-    - publish_path_command() 함수를 사용해 시뮬레이션 기반으로 경로 명령을 주기적으로 전송합니다.
+    callback: 잿슨(디바이스)에서 ACK 메시지 수신 시 호출할 함수.
+              예) callback(agv_id, new_position, state)
     """
+    global mqtt_callback
+    mqtt_callback = callback  # 전달받은 콜백 함수를 저장
     try:
         publish_path_command()
     except KeyboardInterrupt:

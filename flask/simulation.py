@@ -1,13 +1,31 @@
 # simulation.py
 import simpy
-from datetime import datetime
-from threading import Lock
+import random
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import matplotlib.patches as patches
 from collections import deque
+from threading import Lock
+import time
+import logging
 
-# ------------------------------
-# 맵 및 좌표 정의
-# ------------------------------
-MAP = [
+# --------------------------------------------------
+# 로그 설정
+DEBUG_MODE = True  # 개발/디버깅: True, 운영 시에는 False (INFO 또는 WARNING)
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG_MODE else logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("simulation.log", encoding='utf-8')
+    ]
+)
+# --------------------------------------------------
+
+##############################################################################
+# 1) 맵 및 좌표 정의 (요구 조건 그대로)
+##############################################################################
+map_data = [
     [2, 2, 2, 2, 2, 2, 2],  # 출구 (0행)
     [0, 0, 0, 0, 0, 0, 0],
     [0, 1, 0, 1, 0, 1, 0],
@@ -18,34 +36,26 @@ MAP = [
     [0, 0, 0, 0, 0, 0, 0],
     [2, 2, 2, 2, 2, 2, 2]   # 출발 (8행)
 ]
-ROWS = len(MAP)
-COLS = len(MAP[0])
+ROWS = len(map_data)
+COLS = len(map_data[0])
 
-# 선반(하역) 좌표, 출구 좌표
+# 선반(하역) 좌표
 shelf_coords = [(2, 2), (2, 4), (2, 6),
                 (5, 2), (5, 4), (5, 6)]
-exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
+# 출구 좌표 (출구: 맵 첫 행에서 값이 2인 좌표)
+exit_coords = [(0, c) for c in range(COLS) if map_data[0][c] == 2]
 
-# 선반 사용 여부 관리 (True면 다른 AGV가 못 지나감)
-shelf_in_use = {coord: False for coord in shelf_coords}
-
-# ------------------------------
-# 전역 공유 데이터 / 락
-# ------------------------------
+##############################################################################
+# 2) 전역 공유 데이터 / 락 (SSE와 시뮬레이션 간 공유)
+##############################################################################
 data_lock = Lock()
-
 shared_data = {
+    # 각 AGV의 현재 위치와 로그(이동 기록)를 저장
     "positions": {
-        "AGV 1": (8, 0),   # 초기값 (시뮬레이터상)
-        "AGV 2": (8, 0),
-        "AGV 3": (8, 3),
-        "AGV 4": (8, 6)
-    },
-    "statuses": {
-        "AGV 1": "idle",
-        "AGV 2": "idle",
-        "AGV 3": "idle",
-        "AGV 4": "idle"
+        "AGV 1": None,
+        "AGV 2": None,
+        "AGV 3": None,
+        "AGV 4": None
     },
     "logs": {
         "AGV 1": [],
@@ -53,342 +63,192 @@ shared_data = {
         "AGV 3": [],
         "AGV 4": []
     },
-    "directions": {
-        "AGV 1": "N/A",
-        "AGV 2": "N/A",
-        "AGV 3": "N/A",
-        "AGV 4": "N/A"
-    },
-    # --- [AGV1 이동 명령/ACK 상태] ---
-    "agv1_target": None,         # AGV1에게 "다음 칸" 명령을 내릴 때 기록
-    "agv1_moving_ack": False     # 잿슨(AGV1)이 해당 칸 도착을 보고하면 True
+    "agv1_target": None,
+    "agv1_moving_ack": False
 }
 
-
-# ------------------------------
-# BFS 유틸 함수
-# ------------------------------
-def get_neighbors(pos):
-    r, c = pos
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    neighbors = []
-    for dr, dc in directions:
-        nr, nc = r + dr, c + dc
-        if 0 <= nr < ROWS and 0 <= nc < COLS:
-            neighbors.append((nr, nc))
-    return neighbors
-
-def bfs_path(start, goal):
-    """
-    (start)->(goal) 까지의 경로를 BFS로 찾고,
-    경로 리스트를 반환. 못찾으면 [].
-    """
-    from collections import deque
-    queue = deque([start])
-    came_from = {start: None}
-
+##############################################################################
+# 3) BFS 경로 계산 함수
+##############################################################################
+def bfs_path(grid, start, goal, obstacles):
+    if not start or not goal:
+        return None
+    queue = deque([(start, [start])])
+    visited = set([start])
+    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
     while queue:
-        current = queue.popleft()
+        current, path = queue.popleft()
         if current == goal:
-            break
-        for nxt in get_neighbors(current):
-            # 장애물(1)은 못 지나감
-            if MAP[nxt[0]][nxt[1]] == 1:
-                continue
-            # 아직 방문 안한 칸만
-            if nxt not in came_from:
-                came_from[nxt] = current
-                queue.append(nxt)
-
-    # goal까지 못 갔으면 빈 리스트
-    if goal not in came_from:
-        return []
-
-    path = []
-    cur = goal
-    while cur is not None:
-        path.append(cur)
-        cur = came_from[cur]
-    path.reverse()
-    return path
+            return path
+        r, c = current
+        for dr, dc in directions:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < ROWS and 0 <= nc < COLS:
+                if grid[nr][nc] != 1 and ((nr, nc) == goal or (nr, nc) not in obstacles):
+                    if (nr, nc) not in visited:
+                        visited.add((nr, nc))
+                        queue.append(((nr, nc), path + [(nr, nc)]))
+    return None
 
 def get_next_position(current, target):
-    """
-    current에서 target까지 BFS 경로 중
-    '다음 칸'을 반환. 경로 없으면 current 그대로.
-    """
-    path = bfs_path(current, target)
-    if len(path) >= 2:
+    path = bfs_path(map_data, current, target, obstacles=set())
+    if path and len(path) > 1:
         return path[1]
     return current
 
-def select_available_shelf():
-    """ 
-    아직 사용 중이지 않은 선반 좌표를 하나 선택 
-    (모두 사용 중이면 맨 첫번째 반환)
-    """
-    for coord in shelf_coords:
-        if not shelf_in_use[coord]:
-            return coord
-    return shelf_coords[0]
-
-
-# ------------------------------
-# (placeholder) AGV1 명령 전송 함수
-# 실제론 mqtt_client.publish(...)
-# ------------------------------
+##############################################################################
+# 4) MQTT 통신 (AGV1 하드웨어 연동 placeholder)
+##############################################################################
 def send_command_to_agv1(next_pos):
-    """
-    실제 환경:
-      mqtt_client.publish("simpy/commands", json.dumps({
-          "command": "경로",
-          "data": {"next_location": next_pos}
-      }))
-    """
-    print(f"[SIM] (placeholder) send_command_to_agv1(next_pos={next_pos})")
+    logging.debug("[SIM] (placeholder) send_command_to_agv1(next_pos=%s)", next_pos)
+    with data_lock:
+        shared_data["positions"]["AGV 1"] = next_pos
+        shared_data["agv1_moving_ack"] = True
 
+##############################################################################
+# 5) AGV 프로세스 및 이동 함수
+##############################################################################
+MOVE_INTERVAL = 1   # 1초에 한 칸 이동
+WAIT_INTERVAL = 1
 
-# ------------------------------
-# AGV 클래스
-# ------------------------------
-class AGV:
-    def __init__(self, env, name, speed, start, shelf_target, exit_target):
-        """
-        env: simpy Environment
-        name: AGV 이름 (문자열)
-        speed: 이동 속도 (초당 1칸을 (1/speed)초에 이동)
-        start: (row, col) 시작 좌표
-        shelf_target: 하역(선반) 좌표
-        exit_target: 출구 좌표
-        """
-        self.env = env
-        self.name = name
-        self.speed = speed
-        self.start = start
-        self.shelf_target = shelf_target
-        self.exit_target = exit_target
+# 시뮬레이션 모드: MQTT 연동 없이 순수 시뮬레이션 실행
+SIMULATE_MQTT = False
 
-        self.position = start
-        self.phase = "to_shelf"  # "to_shelf"->하역->"to_exit"->출구->반복
-        self.unloaded = False
+def random_start_position():
+    """출발은 8행(출발구역)에서, 값이 2인 좌표 중 하나 선택"""
+    candidates = [(8, c) for c in range(COLS) if map_data[8][c] == 2]
+    return random.choice(candidates) if candidates else (8, 0)
 
-    def move(self):
-        # AGV1과 AGV2..4 로직 분기
-        if self.name == "AGV 1":
-            while True:
-                # 출구 도착하면 idle 후 리셋
-                if (self.phase == "to_exit") and (self.position == self.exit_target):
+def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
+    # 각 AGV가 시작하면 8행에서 시작 (출발 좌표)
+    init_pos = random_start_position()
+    agv_positions[agv_id] = init_pos
+    logs[agv_id].append((env.now, init_pos))
+    key = f"AGV {agv_id+1}"
+    with data_lock:
+        shared_data["positions"][key] = init_pos
+        shared_data["logs"][key].append({"time": env.now, "position": init_pos})
+    logging.debug("AGV %s 시작 위치: %s", agv_id, init_pos)
+
+    while True:
+        # 선반 좌표로 이동 후 10초 대기
+        unloading_target = random.choice(shelf_coords)
+        yield from move_to(env, agv_id, agv_positions, logs, unloading_target)
+        yield env.timeout(10)
+        # 출구 좌표로 이동 후 5초 대기
+        exit_target = random.choice(exit_coords)
+        yield from move_to(env, agv_id, agv_positions, logs, exit_target)
+        yield env.timeout(5)
+
+def move_to(env, agv_id, agv_positions, logs, target):
+    while True:
+        yield env.timeout(MOVE_INTERVAL)
+        curr_pos = agv_positions[agv_id]
+        others = set(pos for k, pos in agv_positions.items() if k != agv_id)
+        path = bfs_path(map_data, curr_pos, target, others)
+        if path and len(path) > 1:
+            next_pos = path[1]
+            if next_pos in others:
+                yield env.timeout(WAIT_INTERVAL)
+                continue
+            if agv_id == 0 and SIMULATE_MQTT:
+                with data_lock:
+                    shared_data["agv1_target"] = next_pos
+                    shared_data["agv1_moving_ack"] = False
+                send_command_to_agv1(next_pos)
+                ack_received = False
+                while not ack_received:
+                    yield env.timeout(0.2)
                     with data_lock:
-                        shared_data["statuses"][self.name] = "idle"
-                        shared_data["logs"][self.name].append({
-                            "time": datetime.now().isoformat(),
-                            "position": self.position,
-                            "direction": "reset",
-                            "state": "idle",
-                            "source": "simulation"
-                        })
-                    yield self.env.timeout(2)
+                        if shared_data["agv1_moving_ack"]:
+                            ack_received = True
+                with data_lock:
+                    agv_positions[agv_id] = shared_data["positions"]["AGV 1"]
+            else:
+                agv_positions[agv_id] = next_pos
 
-                    # 시작점 복귀, 선반 다시 선택
-                    self.position = self.start
-                    self.phase = "to_shelf"
-                    new_shelf = select_available_shelf()
-                    self.shelf_target = new_shelf
-                    continue
-
-                # 현재 목표
-                if self.phase == "to_shelf":
-                    current_target = self.shelf_target
-                else:
-                    current_target = self.exit_target
-
-                if self.position != current_target:
-                    # 다음 칸
-                    next_pos = get_next_position(self.position, current_target)
-                    if next_pos == self.position:
-                        # 더 이상 못가면 stop
-                        with data_lock:
-                            shared_data["statuses"][self.name] = "stop"
-                            shared_data["logs"][self.name].append({
-                                "time": datetime.now().isoformat(),
-                                "position": self.position,
-                                "direction": "none",
-                                "state": "stop",
-                                "source": "simulation"
-                            })
-                        yield self.env.timeout(1)
-                        continue
-
-                    # 1) MQTT 명령 전송 (placeholder)
-                    with data_lock:
-                        shared_data["agv1_target"] = next_pos
-                        shared_data["agv1_moving_ack"] = False
-                    send_command_to_agv1(next_pos)
-
-                    # 2) 잿슨 이동 완료 ack 대기
-                    ack_received = False
-                    while not ack_received:
-                        yield self.env.timeout(0.2)  # 0.2초마다 ack 확인
-                        with data_lock:
-                            if shared_data["agv1_moving_ack"]:
-                                ack_received = True
-
-                    # 3) ack 받았으면 시뮬레이터 내 position 동기화
-                    with data_lock:
-                        self.position = shared_data["positions"][self.name]
-                        shared_data["directions"][self.name] = "R"  # 예시
-                        shared_data["statuses"][self.name] = "moving"
-                        shared_data["logs"][self.name].append({
-                            "time": datetime.now().isoformat(),
-                            "position": self.position,
-                            "direction": "R",
-                            "state": "moving",
-                            "source": "simulation"
-                        })
-
-                    yield self.env.timeout(1 / self.speed)
-
-                else:
-                    # 목표 도달
-                    if self.phase == "to_shelf":
-                        # 선반 도착 → 하역
-                        with data_lock:
-                            shelf_in_use[self.position] = True
-                            shared_data["statuses"][self.name] = "unloading"
-                            shared_data["logs"][self.name].append({
-                                "time": datetime.now().isoformat(),
-                                "position": self.position,
-                                "direction": "N/A",
-                                "state": "unloading",
-                                "source": "simulation"
-                            })
-                        yield self.env.timeout(10)  # 10초 하역
-                        with data_lock:
-                            shelf_in_use[self.position] = False
-                        self.unloaded = True
-                        self.phase = "to_exit"
-                    else:
-                        # 출구거나 등등
-                        yield self.env.timeout(1)
-
+            # 모든 AGV에 대해 shared_data 업데이트 (현재 위치 및 로그 기록)
+            key = f"AGV {agv_id+1}"
+            with data_lock:
+                shared_data["positions"][key] = agv_positions[agv_id]
+                shared_data["logs"][key].append({"time": env.now, "position": agv_positions[agv_id]})
         else:
-            # AGV 2,3,4 로직 (즉시 한칸 이동)
-            while True:
-                if (self.phase == "to_exit") and (self.position == self.exit_target):
-                    with data_lock:
-                        shared_data["statuses"][self.name] = "idle"
-                        shared_data["logs"][self.name].append({
-                            "time": datetime.now().isoformat(),
-                            "position": self.position,
-                            "direction": "reset",
-                            "state": "idle",
-                            "source": "simulation"
-                        })
-                    yield self.env.timeout(2)
+            if curr_pos == target:
+                logs[agv_id].append((env.now, curr_pos))
+                logging.info("[%s] AGV %s 도착 -> %s", env.now, agv_id, curr_pos)
+                return
+        logs[agv_id].append((env.now, agv_positions[agv_id]))
 
-                    # 리셋
-                    self.position = self.start
-                    self.phase = "to_shelf"
-                    new_shelf = select_available_shelf()
-                    self.shelf_target = new_shelf
-                    continue
+##############################################################################
+# 6) 시뮬레이션 메인 함수 (실시간, 무한 실행)
+##############################################################################
+# 실시간 연동을 위해 RealtimeEnvironment 사용 (1:1 비율)
+try:
+    from simpy.rt import RealtimeEnvironment
+except ImportError:
+    # 만약 simpy.rt 모듈이 없으면, 기본 Environment 사용(다만 실제 시간과는 다를 수 있음)
+    RealtimeEnvironment = simpy.Environment
 
-                if self.phase == "to_shelf":
-                    current_target = self.shelf_target
-                else:
-                    current_target = self.exit_target
+def simulation_main():
+    env = RealtimeEnvironment(factor=1, strict=False)
+    NUM_AGV = 4
+    agv_positions = {}
+    logs = {}
+    for i in range(NUM_AGV):
+        agv_positions[i] = (0, 0)
+        logs[i] = []
+    for i in range(NUM_AGV):
+        env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
+    # 무한 실행: 시뮬레이션이 시작된 이후부터 계속해서 위치와 로그가 업데이트됨
+    env.run(until=float('inf'))
 
-                if self.position != current_target:
-                    next_pos = get_next_position(self.position, current_target)
-                    if next_pos == self.position:
-                        with data_lock:
-                            shared_data["statuses"][self.name] = "stop"
-                            shared_data["logs"][self.name].append({
-                                "time": datetime.now().isoformat(),
-                                "position": self.position,
-                                "direction": "none",
-                                "state": "stop",
-                                "source": "simulation"
-                            })
-                        yield self.env.timeout(1)
-                        continue
+##############################################################################
+# 7) 애니메이션 시각화 (원할 경우)
+##############################################################################
+def animate_simulation(logs):
+    fig, ax = plt.subplots(figsize=(7, 5))
+    def draw_map():
+        ax.clear()
+        for r in range(ROWS):
+            for c in range(COLS):
+                val = map_data[r][c]
+                color = 'gray' if val == 1 else ('lightgreen' if val == 3 else 'white')
+                rect = patches.Rectangle((c, r), 1, 1, edgecolor='black', facecolor=color)
+                ax.add_patch(rect)
+        ax.set_xlim(0, COLS)
+        ax.set_ylim(0, ROWS)
+        ax.set_aspect('equal')
+        ax.invert_yaxis()
+        ax.set_xticks(range(COLS+1))
+        ax.set_yticks(range(ROWS+1))
+        ax.grid(False)
 
-                    # 한 칸 즉시 이동
-                    self.position = next_pos
-                    # 방향 판별 (단순)
-                    r, c = self.position
-                    tr, tc = current_target
-                    if r < tr:
-                        direction = "D"
-                    elif r > tr:
-                        direction = "U"
-                    elif c < tc:
-                        direction = "R"
-                    elif c > tc:
-                        direction = "L"
-                    else:
-                        direction = "N/A"
+    def init():
+        draw_map()
 
-                    with data_lock:
-                        shared_data["positions"][self.name] = self.position
-                        shared_data["directions"][self.name] = direction
-                        shared_data["statuses"][self.name] = "moving"
-                        shared_data["logs"][self.name].append({
-                            "time": datetime.now().isoformat(),
-                            "position": self.position,
-                            "direction": direction,
-                            "state": "moving",
-                            "source": "simulation"
-                        })
-                    yield self.env.timeout(1 / self.speed)
-                else:
-                    # 목표 도달 (선반→하역 or 출구→idle)
-                    if self.phase == "to_shelf":
-                        with data_lock:
-                            shelf_in_use[self.position] = True
-                            shared_data["statuses"][self.name] = "unloading"
-                            shared_data["logs"][self.name].append({
-                                "time": datetime.now().isoformat(),
-                                "position": self.position,
-                                "direction": "N/A",
-                                "state": "unloading",
-                                "source": "simulation"
-                            })
-                        yield self.env.timeout(10)  # 하역
-                        with data_lock:
-                            shelf_in_use[self.position] = False
-                        self.unloaded = True
-                        self.phase = "to_exit"
-                    else:
-                        yield self.env.timeout(1)
+    def update(frame):
+        draw_map()
+        colors = ["red", "orange", "yellow", "green"]
+        for agv_id in logs:
+            pos_list = [p for (t, p) in logs[agv_id] if t <= frame]
+            if pos_list:
+                rr, cc = pos_list[-1]
+                circle = plt.Circle((cc + 0.5, rr + 0.5), 0.3, color=colors[agv_id % len(colors)])
+                ax.add_patch(circle)
+        ax.set_title(f"AGV Simulation - Time: {frame}")
 
+    ani = animation.FuncAnimation(
+        fig, update,
+        frames=range(0, 1000),
+        init_func=init,
+        interval=1000,
+        blit=False
+    )
+    plt.show()
 
-def simulation_run():
-    """
-    시뮬레이션 실행 함수.
-    Flask 등에서 threading으로 호출하거나, 
-    메인에서 직접 호출해서 실행 가능.
-    """
-    import threading
-
-    env = simpy.Environment()
-
-    # AGV들 생성
-    agv1 = AGV(env, "AGV 1", speed=1, start=(8, 0), shelf_target=None, exit_target=(0, 0))
-    agv2 = AGV(env, "AGV 2", speed=1, start=(8, 0), shelf_target=None, exit_target=(0, 2))
-    agv3 = AGV(env, "AGV 3", speed=1, start=(8, 3), shelf_target=None, exit_target=(0, 4))
-    agv4 = AGV(env, "AGV 4", speed=1, start=(8, 6), shelf_target=None, exit_target=(0, 6))
-
-    for agv in [agv1, agv2, agv3, agv4]:
-        if agv.shelf_target is None:
-            agv.shelf_target = select_available_shelf()
-
-    env.process(agv1.move())
-    env.process(agv2.move())
-    env.process(agv3.move())
-    env.process(agv4.move())
-
-    try:
-        env.run()
-    except KeyboardInterrupt:
-        print("[Simulation] KeyboardInterrupt, 종료합니다.")
+##############################################################################
+# 8) 메인 실행부
+##############################################################################
+if __name__ == "__main__":
+    # 만약 애니메이션을 동시에 보고 싶다면, 시뮬레이션은 백그라운드 스레드로 실행한 후 animate_simulation() 호출
+    simulation_main()

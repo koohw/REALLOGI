@@ -152,7 +152,7 @@ app.py
 # from simulation import shared_data, data_lock, simulation_once
 
 # # mqtt_agv1.py에서 MQTT 실행 함수를 가져옴
-# from mqtt_agv1 import run_mqtt_agv1_forever
+# from agv_client import run_mqtt_agv1_forever
 
 # app = Flask(__name__)
 # CORS(app)  # 모든 도메인에서 요청 허용
@@ -242,11 +242,6 @@ app.py
 
 
 
-
-# mqtt 통신 데이터 서버
-
-
-# app.py
 from flask import Flask, Response
 from flask_cors import CORS
 import json
@@ -254,47 +249,54 @@ import time
 import threading
 from datetime import datetime
 
-# [수정됨] simulation.py에서 공유 데이터, 락, simulation_run 함수를 import
-from simulation import shared_data, data_lock, simulation_run
-# [수정됨] agv_client.py 파일의 이름은 agv_client.py로 가정하고, run_mqtt_agv1_forever 함수를 import
-from agv_client import run_mqtt_agv1_forever
+# simulation.py에서 공유 데이터, 락, simulation_main 함수를 import합니다.
+from simulation import shared_data, data_lock, simulation_main
+# agv_client.py에서 MQTT 실행 함수를 import합니다.
+from agv_client import run_server_mqtt
 
 app = Flask(__name__)
-CORS(app)  # 모든 도메인에서 접근 허용
+CORS(app)
 
 def event_stream():
     """
     SSE 스트림 함수.
-    1초마다 shared_data에 기록된 모든 AGV의 상태 데이터를 JSON 형식으로 전송합니다.
-    이때, AGV 1의 좌표는 MQTT 업데이트를 통해 갱신된 값이 반영됩니다.
+    매 1초마다 shared_data에 저장된 모든 AGV의 상태 데이터를 JSON 형식으로 전송합니다.
+    데이터가 없으면 빈 문자열("")을 출력합니다.
     """
+    default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
     while True:
         with data_lock:
             agv_list = []
-            for key in shared_data["positions"]:
+            for key in default_keys:
+                pos = shared_data["positions"].get(key, "")
+                state = shared_data.get("statuses", {}).get(key, "")
+                direction = shared_data.get("directions", {}).get(key, "")
+                logs_list = shared_data.get("logs", {}).get(key, [])
+                realtime = (logs_list[-1]["time"]
+                            if logs_list and isinstance(logs_list[-1], dict) and "time" in logs_list[-1]
+                            else "")
                 try:
                     agv_id = int(key.split()[-1])
                 except Exception:
                     agv_id = 0
                 agv_name = f"agv{agv_id}"
-                pos = shared_data["positions"][key]
-                state = shared_data["statuses"].get(key, "unknown")
-                direction = shared_data["directions"].get(key, "")
-                logs = shared_data["logs"].get(key, [])
-                realtime = logs[-1]["time"] if logs else datetime.now().isoformat()
+                if pos == "":
+                    loc_x, loc_y = "", ""
+                else:
+                    loc_x, loc_y = pos
                 agv_data = {
                     "agv_id": agv_id,
                     "agv_name": agv_name,
                     "state": state,
                     "issue": "",
-                    "location_x": pos[0],
-                    "location_y": pos[1],
+                    "location_x": loc_x,
+                    "location_y": loc_y,
                     "direction": direction,
                     "realtime": realtime
                 }
                 agv_list.append(agv_data)
             data = {"success": True, "agv_number": len(agv_list), "agvs": agv_list}
-        yield f"data: {json.dumps(data)}\n\n"
+        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         time.sleep(1)
 
 @app.route("/api/agv-stream")
@@ -302,34 +304,29 @@ def sse():
     return Response(event_stream(), content_type="text/event-stream")
 
 def agv1_update_callback(agv_id, position, state="moving"):
-    """
-    MQTT 콜백 함수에서 호출되어, AGV 1의 상태를 shared_data에 업데이트합니다.
-    이 함수는 오직 AGV 1의 좌표를 업데이트하므로, 시뮬레이터상의 AGV 1 데이터는 MQTT 데이터로 대체됩니다.
-    [수정됨] AGV 1은 오른쪽("R")으로 이동한다고 가정
-    """
     with data_lock:
-        shared_data["positions"][agv_id] = position
-        shared_data["statuses"][agv_id] = state
-        shared_data["logs"][agv_id].append({
+        key = f"AGV {agv_id}"
+        shared_data["positions"][key] = position
+        shared_data.setdefault("statuses", {})[key] = state
+        shared_data.setdefault("logs", {}).setdefault(key, []).append({
             "time": datetime.now().isoformat(),
             "position": position,
             "state": state,
             "source": "mqtt"
         })
-        shared_data["directions"][agv_id] = "R"
+        shared_data.setdefault("directions", {})[key] = "R"
 
-if __name__ == '__main__':
-    # [수정됨] simulation_run()를 별도 스레드로 실행하여 가상 AGV 2, 3, 4의 데이터를 지속적으로 업데이트
-    simulation_thread = threading.Thread(target=simulation_run, daemon=True)
-    simulation_thread.start()
+def start_background_threads():
+    sim_thread = threading.Thread(target=simulation_main, daemon=True)
+    sim_thread.start()
     
-    # [수정됨] agv_client.py의 MQTT 통신을 실행하여 AGV 1의 데이터를 업데이트 (실제 AGV1은 MQTT로 업데이트됨)
     mqtt_thread = threading.Thread(
-        target=run_mqtt_agv1_forever,
+        target=run_server_mqtt,
         args=(agv1_update_callback,),
         daemon=True
     )
     mqtt_thread.start()
-    
-    # Flask 서버 실행: /api/agv-stream 엔드포인트로 실시간 JSON 데이터를 제공
+
+if __name__ == '__main__':
+    start_background_threads()
     app.run(debug=True, port=5000, threaded=True)
