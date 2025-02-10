@@ -480,12 +480,16 @@ WAIT_INTERVAL = 1
 # 하드웨어와 MQTT 통신할 때는 SIMULATE_MQTT 값을 True로 설정해야 합니다.
 SIMULATE_MQTT = False
 
-def random_start_position():
-    candidates = [(8, c) for c in range(COLS) if map_data[8][c] == 2]
+def random_start_position(used=None):
+    if used is None:
+        used = set()
+    candidates = [(8, c) for c in range(COLS) if map_data[8][c] == 2 and (8, c) not in used]
     return random.choice(candidates) if candidates else (8, 0)
 
-def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
-    init_pos = random_start_position()
+
+def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords, start_pos):
+    # AGV1은 무조건 (8,0)로 시작, 다른 AGV는 start_pos로 전달된 값을 사용
+    init_pos = start_pos
     agv_positions[agv_id] = init_pos
     logs[agv_id].append((datetime.now().isoformat(), init_pos))
     key = f"AGV {agv_id+1}"
