@@ -97,23 +97,19 @@ def send_command(command, data=None):
         print(f"[서버] 명령 전송 실패: {payload}")
 
 def publish_path_command():
-    """
-    시뮬레이션을 기반으로 잿슨(디바이스)로 '경로' 명령을 주기적으로 전송합니다.
-    - 현재 위치는 shared_data["positions"]["AGV 1"]에서 읽어오고,
-      목표(target_location)를 바탕으로 get_next_position()을 호출하여
-      다음 칸(next_location)을 계산합니다.
-    - 만약 다음 칸이 현재 위치와 동일하면(즉, 더 이상 이동 불가능) '정지' 명령을 발행합니다.
-    """
     global target_location
     while True:
         with data_lock:
-            current_location = shared_data["positions"].get("AGV 1", (8, 0))
+            current_location = shared_data["positions"].get("AGV 1")
+        if current_location is None:
+            current_location = (8, 0)
         next_location = get_next_position(current_location, target_location)
         if next_location == current_location:
             send_command("정지")
         else:
             send_command("경로", {"next_location": list(next_location)})
         time.sleep(5)
+
 
 def run_server_mqtt(callback=None):
     """

@@ -364,7 +364,7 @@ shelf_coords = [(2, 2), (2, 4), (2, 6),
 exit_coords = [(0, c) for c in range(COLS) if map_data[0][c] == 2]
 
 ##############################################################################
-# 2) 공유 데이터 및 락 (SSE와 시뮬레이션 간 데이터 공유)
+# 2) 공유 데이터 및 락 (시뮬레이션과 SSE 간 데이터 공유)
 ##############################################################################
 data_lock = Lock()
 shared_data = {
@@ -380,7 +380,7 @@ shared_data = {
         "AGV 3": [],
         "AGV 4": []
     },
-    # 초기 상태는 RUNNING, 필요에 따라 "UNLOADING", "STOPPED", "EMERGENCY(STOPPED)" 등으로 업데이트
+    # 초기 상태는 RUNNING; 이후 "UNLOADING", "STOPPED", "EMERGENCY(STOPPED)" 등으로 업데이트
     "statuses": {
         "AGV 1": "RUNNING",
         "AGV 2": "RUNNING",
@@ -401,8 +401,11 @@ shared_data = {
 # 3) BFS 경로 탐색 함수 (너비 우선 탐색)
 ##############################################################################
 def bfs_path(grid, start, goal, obstacles):
+    # start와 goal은 반드시 튜플이어야 합니다.
     if not start or not goal:
         return None
+    start = tuple(start)   # 혹시 리스트로 들어오면 튜플로 변환
+    goal = tuple(goal)
     queue = deque([(start, [start])])
     visited = set([start])
     directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
@@ -421,6 +424,8 @@ def bfs_path(grid, start, goal, obstacles):
     return None
 
 def get_next_position(current, target):
+    current = tuple(current)
+    target = tuple(target)
     path = bfs_path(map_data, current, target, obstacles=set())
     if path and len(path) > 1:
         return path[1]
@@ -448,6 +453,7 @@ def compute_direction(curr, nxt):
 ##############################################################################
 def available_moves(pos):
     moves = []
+    pos = tuple(pos)
     for (dr, dc) in [(0,1), (0,-1), (1,0), (-1,0)]:
         new_pos = (pos[0] + dr, pos[1] + dc)
         if 0 <= new_pos[0] < ROWS and 0 <= new_pos[1] < COLS and map_data[new_pos[0]][new_pos[1]] != 1:
@@ -469,7 +475,7 @@ def is_deadlocked(pos, occupied):
 def send_command_to_agv1(next_pos):
     logging.debug("[SIM] (플레이스홀더) send_command_to_agv1(next_pos=%s)", next_pos)
     with data_lock:
-        shared_data["positions"]["AGV 1"] = next_pos
+        shared_data["positions"]["AGV 1"] = tuple(next_pos)
         shared_data["agv1_moving_ack"] = True
 
 ##############################################################################
@@ -477,30 +483,30 @@ def send_command_to_agv1(next_pos):
 ##############################################################################
 MOVE_INTERVAL = 1   # 1초마다 한 칸 이동
 WAIT_INTERVAL = 1
-# 하드웨어와 MQTT 통신할 때는 SIMULATE_MQTT 값을 True로 설정해야 합니다.
-SIMULATE_MQTT = False
+SIMULATE_MQTT = False  # 하드웨어와 MQTT 통신할 때 True로 사용
 
+# random_start_position: row 8의 후보 중, 이미 사용된 좌표(used)를 제외한 좌표를 랜덤 반환
 def random_start_position(used=None):
     if used is None:
         used = set()
+    # 후보는 row 8의 모든 좌표 중, 값이 2인 (즉, 출발 구역) 좌표이며, 이미 사용되지 않은 좌표들
     candidates = [(8, c) for c in range(COLS) if map_data[8][c] == 2 and (8, c) not in used]
     return random.choice(candidates) if candidates else (8, 0)
 
-
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords, start_pos):
-    # AGV1은 무조건 (8,0)로 시작, 다른 AGV는 start_pos로 전달된 값을 사용
+    # AGV1은 무조건 (8, 0)로 시작하도록 (start_pos로 전달됨)
     init_pos = start_pos
-    agv_positions[agv_id] = init_pos
-    logs[agv_id].append((datetime.now().isoformat(), init_pos))
+    agv_positions[agv_id] = tuple(init_pos)
+    logs[agv_id].append((datetime.now().isoformat(), tuple(init_pos)))
     key = f"AGV {agv_id+1}"
     with data_lock:
-        shared_data["positions"][key] = init_pos
-        shared_data["logs"][key].append({"time": datetime.now().isoformat(), "position": init_pos})
+        shared_data["positions"][key] = tuple(init_pos)
+        shared_data["logs"][key].append({"time": datetime.now().isoformat(), "position": tuple(init_pos)})
         shared_data["statuses"][key] = "RUNNING"
     logging.debug("AGV %s 시작 위치: %s", agv_id, init_pos)
 
     while True:
-        # AGV 1이 EMERGENCY(STOPPED) 상태면 이동 대기
+        # AGV 1이 EMERGENCY(STOPPED) 상태면 대기
         if agv_id == 0:
             with data_lock:
                 if shared_data["statuses"].get(key) == "EMERGENCY(STOPPED)":
@@ -528,33 +534,32 @@ def move_to(env, agv_id, agv_positions, logs, target):
     key = f"AGV {agv_id+1}"
     while True:
         yield env.timeout(MOVE_INTERVAL)
-        curr_pos = agv_positions[agv_id]
-        # 다른 AGV들의 위치 (dict)
-        others = {k: pos for k, pos in agv_positions.items() if k != agv_id}
+        curr_pos = tuple(agv_positions[agv_id])
+        # 다른 AGV들의 위치 (dict); ensure they are tuples
+        others = {k: tuple(pos) for k, pos in agv_positions.items() if k != agv_id}
         path = bfs_path(map_data, curr_pos, target, set(others.values()))
         if path and len(path) > 1:
-            next_pos = path[1]
+            next_pos = tuple(path[1])
             direction = compute_direction(curr_pos, next_pos)
             with data_lock:
                 shared_data["directions"][key] = direction
 
             if next_pos in others.values():
                 # 여러 blocker가 있는 경우
-                blocking_ids = [k for k, pos in agv_positions.items() if k != agv_id and pos == next_pos]
+                blocking_ids = [k for k, pos in agv_positions.items() if k != agv_id and tuple(pos) == next_pos]
                 candidate_ids = blocking_ids + [agv_id]
                 candidate_distances = {}
                 for cid in candidate_ids:
-                    pos = agv_positions[cid]
+                    pos = tuple(agv_positions[cid])
                     p = bfs_path(map_data, pos, target, set())
                     candidate_distances[cid] = len(p) if p is not None else float('inf')
                 if len(candidate_ids) >= 3:
-                    # 정렬: 내림차순 (남은 경로 길이가 큰 순서)
                     sorted_candidates = sorted(candidate_ids, key=lambda cid: candidate_distances[cid], reverse=True)
                     farthest = sorted_candidates[0]
                     second_farthest = sorted_candidates[1] if len(sorted_candidates) >= 2 else farthest
-                    # 만약 현재 AGV가 farthest인데, farthest가 움직일 수 있으면 양보
+                    # 만약 현재 AGV가 가장 멀리 있는 후보(farthest)이고, 그 AGV가 데드락 상태가 아니라면 양보
                     if agv_id == farthest:
-                        if not is_deadlocked(agv_positions[farthest], set(agv_positions.values()) - {agv_positions[farthest]}):
+                        if not is_deadlocked(tuple(agv_positions[farthest]), set(tuple(p) for p in agv_positions.values() if p != agv_positions[farthest])):
                             with data_lock:
                                 shared_data["statuses"][key] = "STOPPED"
                                 shared_data["directions"][key] = ""
@@ -593,17 +598,17 @@ def move_to(env, agv_id, agv_positions, logs, target):
 
             with data_lock:
                 shared_data["statuses"][key] = "RUNNING"
-                shared_data["positions"][key] = agv_positions[agv_id]
+                shared_data["positions"][key] = tuple(agv_positions[agv_id])
                 shared_data["logs"][key].append({
                     "time": datetime.now().isoformat(),
-                    "position": agv_positions[agv_id]
+                    "position": tuple(agv_positions[agv_id])
                 })
         else:
             if curr_pos == target:
                 logs[agv_id].append((datetime.now().isoformat(), curr_pos))
                 logging.info("[%s] AGV %s 도착 -> %s", datetime.now().isoformat(), agv_id, curr_pos)
                 return
-        logs[agv_id].append((datetime.now().isoformat(), agv_positions[agv_id]))
+        logs[agv_id].append((datetime.now().isoformat(), tuple(agv_positions[agv_id])))
 
 ##############################################################################
 # 7) 시뮬레이션 메인 함수 (실시간, 무한 실행)
@@ -618,11 +623,22 @@ def simulation_main():
     NUM_AGV = 4
     agv_positions = {}
     logs = {}
+    start_positions = {}
+    used_positions = set()
+    # AGV1은 무조건 (8, 0)로 시작
+    start_positions[0] = (8, 0)
+    used_positions.add((8, 0))
+    # 다른 AGV는 random_start_position()을 사용하되, (8, 0)은 제외하고 중복 없이 할당
+    for i in range(1, NUM_AGV):
+        pos = random_start_position(used_positions)
+        start_positions[i] = pos
+        used_positions.add(pos)
     for i in range(NUM_AGV):
-        agv_positions[i] = (0, 0)
+        agv_positions[i] = start_positions[i]
         logs[i] = []
+        logging.debug("AGV %s 시작 좌표: %s", i, start_positions[i])
     for i in range(NUM_AGV):
-        env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
+        env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords, start_positions[i]))
     env.run(until=float('inf'))
 
 ##############################################################################
@@ -645,10 +661,8 @@ def animate_simulation(logs):
         ax.set_xticks(range(COLS+1))
         ax.set_yticks(range(ROWS+1))
         ax.grid(False)
-
     def init():
         draw_map()
-
     def update(frame):
         draw_map()
         colors = ["red", "orange", "yellow", "green"]
@@ -659,7 +673,6 @@ def animate_simulation(logs):
                 circle = plt.Circle((cc + 0.5, rr + 0.5), 0.3, color=colors[agv_id % len(colors)])
                 ax.add_patch(circle)
         ax.set_title(f"AGV 시뮬레이션 - 시간: {frame}")
-
     ani = animation.FuncAnimation(
         fig, update,
         frames=range(0, 1000),
