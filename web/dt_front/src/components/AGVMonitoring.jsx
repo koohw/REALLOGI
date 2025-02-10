@@ -52,18 +52,18 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   const socketRef = useRef(null);
   const mapContainerRef = useRef(null);
 
-  // Map dimensions
+  // Map dimensions - swapped width and height
   const CELL_SIZE = 40;
-  const MAP_WIDTH = mapData[0].length * CELL_SIZE;
-  const MAP_HEIGHT = mapData.length * CELL_SIZE;
+  const MAP_WIDTH = mapData.length * CELL_SIZE;
+  const MAP_HEIGHT = mapData[0].length * CELL_SIZE;
 
   const getCellStyle = (cellType) => {
     switch (cellType) {
-      case 1: // 벽
+      case 1:
         return "bg-gray-200";
-      case 2: // 작업 구역 (선반/출구)
+      case 2:
         return "bg-blue-100";
-      default: // 빈 공간
+      default:
         return "";
     }
   };
@@ -81,6 +81,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     }
   };
 
+  // Socket connection and event handlers remain the same
   useEffect(() => {
     const initializeSocket = () => {
       const serverAddress = new URL(serverUrl);
@@ -114,6 +115,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     };
   }, [serverUrl]);
 
+  // Event handlers remain the same
   const handleAnalysisResult = useCallback((result) => {
     setIsAnalyzing(false);
     setAnalysisResult(result);
@@ -212,8 +214,9 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     if (!agvData.agvs?.length) return null;
 
     return agvData.agvs.map((agv) => {
-      const x = agv.location_x * CELL_SIZE;
-      const y = agv.location_y * CELL_SIZE;
+      // Swap x and y coordinates for AGV positioning
+      const x = agv.location_y * CELL_SIZE;
+      const y = agv.location_x * CELL_SIZE;
 
       return (
         <div
