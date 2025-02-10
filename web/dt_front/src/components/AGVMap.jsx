@@ -13,78 +13,23 @@ const AGVMap = () => {
   const agvPositions = useRef(new Map());
   const cellSize = 25;
 
-  // 확대/축소 및 드래그 상태 관리
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // const mapData = [
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  //   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  // ];
-
   const mapData = [
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
-    [
-      0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-      1, 0, 1, 0, 1,
-    ],
-    [
-      1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
-      0, 1, 0, 1, 0,
-    ],
+    [2, 2, 2, 2, 2, 2, 2],
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0],
+    [2, 2, 2, 2, 2, 2, 2],
   ];
 
-  // 확대/축소 핸들러
   const handleWheel = (e) => {
     e.preventDefault();
     const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
@@ -93,7 +38,6 @@ const AGVMap = () => {
     );
   };
 
-  // 드래그 핸들러
   const handleMouseDown = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -115,7 +59,6 @@ const AGVMap = () => {
     setIsDragging(false);
   };
 
-  // 기존 AGV 위치 업데이트 로직
   useEffect(() => {
     const interpolatePosition = (startX, startY, endX, endY, progress) => {
       return {
@@ -152,87 +95,37 @@ const AGVMap = () => {
       requestAnimationFrame(animate);
     };
 
-    const initialData = {
-      success: true,
-      agv_number: 4,
-      agv: [
-        {
-          agv_id: 1,
-          agv_name: "agv1",
-          state: "fine",
-          issue: "",
-          location_x: 2,
-          location_y: 0,
-          direction: "R",
-        },
-        {
-          agv_id: 2,
-          agv_name: "agv2",
-          state: "fine",
-          issue: "",
-          location_x: 5,
-          location_y: 2,
-          direction: "D",
-        },
-        {
-          agv_id: 3,
-          agv_name: "agv3",
-          state: "fine",
-          issue: "",
-          location_x: 6,
-          location_y: 1,
-          direction: "U",
-        },
-        {
-          agv_id: 4,
-          agv_name: "agv4",
-          state: "fine",
-          issue: "",
-          location_x: 4,
-          location_y: 3,
-          direction: "D",
-        },
-      ],
-    };
-
-    initialData.agv.forEach((agv) => {
-      agvPositions.current.set(agv.agv_id, {
-        x: agv.location_x,
-        y: agv.location_y,
-      });
-    });
-
-    setAgvData(initialData.agv);
+    setAgvData([]);
 
     const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.success && data.agv) {
-        data.agv.forEach((newAgv) => {
+      if (data.success && data.agvs) {
+        data.agvs.forEach((newAgv) => {
           const currentPos = agvPositions.current.get(newAgv.agv_id);
           if (currentPos) {
             if (
-              currentPos.x !== newAgv.location_x ||
-              currentPos.y !== newAgv.location_y
+              currentPos.x !== newAgv.location_y || // Swapped from location_x
+              currentPos.y !== newAgv.location_x // Swapped from location_y
             ) {
               updateAGVPosition(
                 newAgv.agv_id,
                 currentPos.x,
                 currentPos.y,
-                newAgv.location_x,
-                newAgv.location_y,
+                newAgv.location_y, // Swapped from location_x
+                newAgv.location_x, // Swapped from location_y
                 1000
               );
             }
-            agvPositions.current.set(newAgv.agv_id, {
-              x: newAgv.location_x,
-              y: newAgv.location_y,
-            });
           }
+          agvPositions.current.set(newAgv.agv_id, {
+            x: newAgv.location_y, // Swapped from location_x
+            y: newAgv.location_x, // Swapped from location_y
+          });
         });
 
-        setAgvData(data.agv);
-        setLastUpdate(data.agv[0]?.realtime || "");
+        setAgvData(data.agvs);
+        setLastUpdate(data.agvs[0]?.realtime || "");
       }
     };
 
@@ -242,28 +135,30 @@ const AGVMap = () => {
   }, []);
 
   const getDirectionArrow = (direction) => {
-    switch (direction) {
-      case "U":
+    switch (direction?.toLowerCase()) {
+      case "u":
         return <ArrowUp className="text-white" size={10} />;
-      case "D":
+      case "d":
         return <ArrowDown className="text-white" size={10} />;
-      case "L":
+      case "l":
         return <ArrowLeft className="text-white" size={10} />;
-      case "R":
+      case "r":
         return <ArrowRight className="text-white" size={10} />;
-      case "NONE":
-        return <Circle className="text-white" size={8} />;
       default:
         return <Circle className="text-white" size={8} />;
     }
   };
 
   const getAGVColor = (state) => {
-    switch (state) {
-      case "fine":
+    switch (state?.toUpperCase()) {
+      case "RUNNING":
         return "#22c55e";
-      default:
+      case "STOPPED":
         return "#EF4444";
+      case "UNLOADING":
+        return "#F59E0B";
+      default:
+        return "#6B7280";
     }
   };
 
@@ -273,12 +168,24 @@ const AGVMap = () => {
     return date.toLocaleTimeString();
   };
 
+  const getCellClassName = (cell) => {
+    switch (cell) {
+      case 0:
+        return "bg-white";
+      case 1:
+        return "bg-gray-100";
+      case 2:
+        return "bg-sky-100"; // 연한 하늘색 추가
+      default:
+        return "bg-white";
+    }
+  };
+
   return (
     <div className="flex-1">
       <div className="mb-1 text-sm text-gray-600">
         Last Update: {formatTime(lastUpdate)}
       </div>
-      {/* 확대/축소 및 드래그 가능한 컨테이너 */}
       <div
         className="relative overflow-hidden border rounded-lg shadow-lg"
         style={{
@@ -299,7 +206,6 @@ const AGVMap = () => {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          {/* Map Background */}
           <div className="absolute top-0 left-0 w-full h-full">
             {mapData.map((row, y) => (
               <div
@@ -310,7 +216,7 @@ const AGVMap = () => {
                 {row.map((cell, x) => (
                   <div
                     key={`cell-${x}-${y}`}
-                    className={cell === 1 ? "bg-gray-100" : "bg-white"}
+                    className={getCellClassName(cell)}
                     style={{
                       width: cellSize,
                       height: cellSize,
@@ -321,11 +227,10 @@ const AGVMap = () => {
             ))}
           </div>
 
-          {/* AGVs */}
           {agvData.map((agv) => {
             const initialPos = agvPositions.current.get(agv.agv_id) || {
-              x: agv.location_x,
-              y: agv.location_y,
+              x: agv.location_y, // Swapped from location_x
+              y: agv.location_x, // Swapped from location_y
             };
             return (
               <div
@@ -337,8 +242,8 @@ const AGVMap = () => {
                   height: cellSize * 0.8,
                   left: cellSize * 0.1,
                   top: cellSize * 0.1,
-                  transform: `translate(${(initialPos.x * cellSize) / 2}px, ${
-                    (initialPos.y * cellSize) / 2
+                  transform: `translate(${initialPos.x * cellSize}px, ${
+                    initialPos.y * cellSize
                   }px)`,
                   backgroundColor: getAGVColor(agv.state),
                   boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
