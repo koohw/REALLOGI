@@ -6,7 +6,6 @@ import React, {
   useMemo,
 } from "react";
 import { io } from "socket.io-client";
-import { Truck } from "lucide-react";
 
 const Modal = ({ isOpen, onClose, children, title }) => {
   if (!isOpen) return null;
@@ -51,11 +50,23 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const socketRef = useRef(null);
   const mapContainerRef = useRef(null);
+  const previousPositionsRef = useRef(new Map());
 
-  // Map dimensions - swapped width and height
   const CELL_SIZE = 40;
   const MAP_WIDTH = mapData.length * CELL_SIZE;
   const MAP_HEIGHT = mapData[0].length * CELL_SIZE;
+
+  const getAGVColor = (agvId, currentX, currentY) => {
+    const prevPosition = previousPositionsRef.current.get(agvId);
+    if (!prevPosition) {
+      previousPositionsRef.current.set(agvId, { x: currentX, y: currentY });
+      return "bg-green-500"; // 초기 상태는 이동 중으로 간주
+    }
+
+    const isMoving = prevPosition.x !== currentX || prevPosition.y !== currentY;
+    previousPositionsRef.current.set(agvId, { x: currentX, y: currentY });
+    return isMoving ? "bg-green-500" : "bg-orange-500";
+  };
 
   const getCellStyle = (cellType) => {
     switch (cellType) {
@@ -65,19 +76,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         return "bg-blue-100";
       default:
         return "";
-    }
-  };
-
-  const getAGVColor = (status) => {
-    switch (status) {
-      case "active":
-        return "text-blue-500";
-      case "idle":
-        return "text-gray-400";
-      case "error":
-        return "text-red-500";
-      default:
-        return "text-blue-500";
     }
   };
 
@@ -214,7 +212,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     if (!agvData.agvs?.length) return null;
 
     return agvData.agvs.map((agv) => {
-      // Swap x and y coordinates for AGV positioning
       const x = agv.location_y * CELL_SIZE;
       const y = agv.location_x * CELL_SIZE;
 
@@ -235,7 +232,15 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
               transform: `rotate(${agv.direction || 0}deg)`,
             }}
           >
-            <Truck className={`w-8 h-8 ${getAGVColor(agv.status)}`} />
+            <div
+              className={`w-8 h-8 rounded-full ${getAGVColor(
+                agv.agv_id,
+                agv.location_x,
+                agv.location_y
+              )} flex items-center justify-center shadow-md`}
+            >
+              <div className="w-2 h-2 bg-white rounded-full" />
+            </div>
             <span className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-xs font-bold">
               {agv.agv_id}
             </span>

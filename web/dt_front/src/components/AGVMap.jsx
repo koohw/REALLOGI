@@ -105,22 +105,22 @@ const AGVMap = () => {
           const currentPos = agvPositions.current.get(newAgv.agv_id);
           if (currentPos) {
             if (
-              currentPos.x !== newAgv.location_y || // Swapped from location_x
-              currentPos.y !== newAgv.location_x // Swapped from location_y
+              currentPos.x !== newAgv.location_y ||
+              currentPos.y !== newAgv.location_x
             ) {
               updateAGVPosition(
                 newAgv.agv_id,
                 currentPos.x,
                 currentPos.y,
-                newAgv.location_y, // Swapped from location_x
-                newAgv.location_x, // Swapped from location_y
+                newAgv.location_y,
+                newAgv.location_x,
                 1000
               );
             }
           }
           agvPositions.current.set(newAgv.agv_id, {
-            x: newAgv.location_y, // Swapped from location_x
-            y: newAgv.location_x, // Swapped from location_y
+            x: newAgv.location_y,
+            y: newAgv.location_x,
           });
         });
 
@@ -155,6 +155,8 @@ const AGVMap = () => {
         return "#22c55e";
       case "STOPPED":
         return "#EF4444";
+      case "EMERGENCY":
+        return "#DC2626";
       case "UNLOADING":
         return "#F59E0B";
       default:
@@ -175,7 +177,7 @@ const AGVMap = () => {
       case 1:
         return "bg-gray-100";
       case 2:
-        return "bg-sky-100"; // 연한 하늘색 추가
+        return "bg-sky-100";
       default:
         return "bg-white";
     }
@@ -229,8 +231,8 @@ const AGVMap = () => {
 
           {agvData.map((agv) => {
             const initialPos = agvPositions.current.get(agv.agv_id) || {
-              x: agv.location_y, // Swapped from location_x
-              y: agv.location_x, // Swapped from location_y
+              x: agv.location_y,
+              y: agv.location_x,
             };
             return (
               <div
@@ -254,7 +256,7 @@ const AGVMap = () => {
                 <div className="transform transition-transform duration-300">
                   {getDirectionArrow(agv.direction)}
                 </div>
-                <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-medium shadow-md">
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-1 py-0.2 rounded-full text-[8px] font-medium shadow-sm">
                   {agv.agv_name}
                 </div>
                 {agv.issue && (
