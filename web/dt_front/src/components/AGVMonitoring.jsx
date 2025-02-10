@@ -100,9 +100,9 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
       });
 
       socket.on("message", handleSocketMessage);
+      socket.on("simulation_final", handleSimulationFinal); // Add this line
       socket.on("disconnect", handleDisconnect);
       socket.on("error", handleError);
-      socket.on("analysis_result", handleAnalysisResult);
 
       return socket;
     };
@@ -116,7 +116,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   }, [serverUrl]);
 
   // Event handlers remain the same
-  const handleAnalysisResult = useCallback((result) => {
+  const handleSimulationFinal = useCallback((result) => {
     setIsAnalyzing(false);
     setAnalysisResult(result);
     setShowAnalysisModal(true);
@@ -385,7 +385,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
       <Modal
         isOpen={showAnalysisModal}
         onClose={() => setShowAnalysisModal(false)}
-        title="AGV 운영 분석 결과"
+        title="시뮬레이션 결과"
       >
         {analysisResult && (
           <div className="space-y-4">
@@ -393,27 +393,27 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
               <h3 className="font-semibold mb-2">AGV 운영 통계</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">평균 이동 거리</div>
+                  <div className="text-sm text-gray-600">시간당 처리량</div>
                   <div className="text-lg font-semibold">
-                    {analysisResult.avgDistance}m
+                    {analysisResult.throughput_per_hour.toFixed(1)}건/시간
                   </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">평균 속도</div>
+                  <div className="text-sm text-gray-600">AGV당 배송량</div>
                   <div className="text-lg font-semibold">
-                    {analysisResult.avgSpeed}m/s
+                    {analysisResult.delivered_per_agv.toFixed(1)}건
                   </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">총 운행 시간</div>
+                  <div className="text-sm text-gray-600">평균 사이클 타임</div>
                   <div className="text-lg font-semibold">
-                    {analysisResult.totalTime}초
+                    {analysisResult.avg_cycle.toFixed(1)}초
                   </div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">충돌 위험 횟수</div>
+                  <div className="text-sm text-gray-600">AGV 수</div>
                   <div className="text-lg font-semibold">
-                    {analysisResult.collisionRisks}회
+                    {analysisResult.agv_count}대
                   </div>
                 </div>
               </div>
