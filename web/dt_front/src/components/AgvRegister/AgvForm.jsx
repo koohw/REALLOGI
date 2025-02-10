@@ -13,6 +13,9 @@ export default function AgvForm({ onSubmit }) {
     agvFootnote: '',
     warehouseId: ''
   });
+
+  const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+  const fullUrl = `${baseUrl}/Agvs/register`;
   
 
   useEffect(() => {
@@ -37,7 +40,7 @@ export default function AgvForm({ onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:8080/api/Agvs/register', 
+      const response = await axios.post(fullUrl, 
         {
           ...formData,
           warehouseId: parseInt(formData.warehouseId)
