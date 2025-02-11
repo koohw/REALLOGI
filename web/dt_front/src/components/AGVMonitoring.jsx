@@ -70,12 +70,14 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
 
   const getCellStyle = (cellType) => {
     switch (cellType) {
+      case 0:
+        return "bg-white border border-gray-100"; // 빈 공간도 테두리와 함께 표시
       case 1:
         return "bg-gray-200";
       case 2:
         return "bg-blue-100";
       default:
-        return "";
+        return "bg-white";
     }
   };
 
@@ -357,8 +359,8 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         <div
           className="relative"
           style={{
-            width: `${MAP_WIDTH}px`,
-            height: `${MAP_HEIGHT}px`,
+            width: `${MAP_HEIGHT}px`,
+            height: `${MAP_WIDTH}px`,
             background: "#f8f9fa",
           }}
         >
