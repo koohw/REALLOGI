@@ -24,7 +24,7 @@ def event_stream():
         with data_lock:
             agv_list = []
             for key in default_keys:
-                pos = shared_data["positions"].get(key, "")
+                pos = shared_data["positions"].get(key)
                 state = shared_data.get("statuses", {}).get(key, "")
                 direction = shared_data.get("directions", {}).get(key, "")
                 logs_list = shared_data.get("logs", {}).get(key, [])
@@ -36,7 +36,7 @@ def event_stream():
                 except Exception:
                     agv_id = 0
                 agv_name = f"agv{agv_id}"
-                if pos == "":
+                if not pos:
                     loc_x, loc_y = "", ""
                 else:
                     loc_x, loc_y = pos
@@ -85,4 +85,4 @@ def start_background_threads():
 
 if __name__ == '__main__':
     start_background_threads()
-    app.run(debug=True, port=5000, threaded=True)
+    app.run(debug=False, use_reloader=False, port=5000)
