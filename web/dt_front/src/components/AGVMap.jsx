@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { agvService } from "../api/agvService";
 import AGVControlPanel from "./AGVControlPanel";
+import TileMap from "./TileMap"; // Import the new TileMap component
 
 const AGVMap = () => {
   const [agvData, setAgvData] = useState([]);
@@ -189,7 +190,7 @@ const AGVMap = () => {
         return "#22c55e";
       case "STOPPED":
         return "#EF4444";
-      case "EMERGENCY":
+      case "EMERGENCY(STOPPED)":
         return "#DC2626";
       case "UNLOADING":
         return "#F59E0B";
@@ -240,26 +241,7 @@ const AGVMap = () => {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            <div className="absolute top-0 left-0 w-full h-full">
-              {mapData.map((row, y) => (
-                <div
-                  key={`row-${y}`}
-                  className="flex"
-                  style={{ height: cellSize }}
-                >
-                  {row.map((cell, x) => (
-                    <div
-                      key={`cell-${x}-${y}`}
-                      className={getCellClassName(cell)}
-                      style={{
-                        width: cellSize,
-                        height: cellSize,
-                      }}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <TileMap mapData={mapData} cellSize={cellSize} />
 
             {agvData.map((agv) => {
               const initialPos = agvPositions.current.get(agv.agv_id) || {
