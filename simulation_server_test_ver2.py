@@ -70,6 +70,13 @@ COLS = len(MAP[0])
 shelf_coords = [(2, 2), (2, 4), (2, 6), (5, 2), (5, 4), (5, 6)]
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
 
+# ─── 헬퍼 함수: 통로 영역 판별 ─────────────────────────────
+def is_in_corridor(cell):
+    """예제: 통로 영역을 row가 2~4, col이 2~4 인 영역으로 정의 (필요에 따라 수정)"""
+    row, col = cell
+    return (2 <= row <= 4) and (2 <= col <= 4)
+# ─────────────────────────────────────────────────────
+
 def create_app(port):
     """Create Flask application with specific port configuration"""
     app = Flask(__name__)
@@ -364,16 +371,15 @@ def create_app(port):
 
             # ④ 경로 실행 (다음 셀로 이동)
             if len(agv.path) > 1:
-                next_cell = agv.path[1]  # 목표 셀 (정수 좌표)
+                next_cell = agv.path[1]
 
                 # [추가] 현재 다른 AGV의 정수 위치들을 확인하여, 만약 next_cell가 이미 다른 AGV의 현재 위치라면 바로 재설계
                 occupied_cells = {(int(round(other.pos[0])), int(round(other.pos[1]))) for other in SIM_AGVS if other.id != agv.id}
                 if next_cell in occupied_cells:
-                    # cargo 상태에 따라 새 목표 선택
                     if agv.cargo == 0:
                         target = find_nearest_shelf(current_cell, agv.id)
                     else:
-                        target = find_alternative_exit(current_cell, exclude=next_cell, current_agv_id=agv.id)
+                        target = find_nearest_exit(current_cell, agv.id)
                     new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int))
                     if new_path and len(new_path) > 1:
                         agv.path = new_path
@@ -381,6 +387,30 @@ def create_app(port):
                     else:
                         yield env.timeout(0.1)
                         continue
+
+                # ★ 수정된 부분: 수직 통로에서 반대 방향 진행 시 후진 처리 (오직 둘 다 통로 내에 있을 때만)
+                cur_dir = (next_cell[0] - current_cell[0], next_cell[1] - current_cell[1])
+                if abs(cur_dir[0]) > 0 and abs(cur_dir[1]) < 1e-6:  # 수직 이동인 경우
+                    for other in SIM_AGVS:
+                        if other.id == agv.id:
+                            continue
+                        other_cell = (int(round(other.pos[0])), int(round(other.pos[1])))
+                        # 오직 두 AGV 모두 통로 내에 있을 때만 후진 시도
+                        if is_in_corridor(current_cell) and is_in_corridor(other_cell):
+                            if other.path and len(other.path) > 1:
+                                other_dir = (other.path[1][0] - other_cell[0], other.path[1][1] - other_cell[1])
+                            else:
+                                other_dir = (0, 0)
+                            if abs(other_dir[0]) > 0 and abs(other_dir[1]) < 1e-6 and (cur_dir[0] * other_dir[0] < 0):
+                                reverse_cell = (current_cell[0] - cur_dir[0], current_cell[1] - cur_dir[1])
+                                if 0 <= reverse_cell[0] < ROWS and 0 <= reverse_cell[1] < COLS and MAP[reverse_cell[0]][reverse_cell[1]] != 1:
+                                    occupied = any((int(round(o.pos[0])), int(round(o.pos[1]))) == reverse_cell for o in SIM_AGVS)
+                                    if not occupied and reverse_cell not in RESERVED_CELLS:
+                                        # 후진 경로: 현재 셀 -> reverse_cell -> 현재 셀 (대기)
+                                        agv.path = [current_cell, reverse_cell, current_cell] + agv.path[1:]
+                                        next_cell = agv.path[1]
+                                        break
+                    # (else 분기는 제거)
 
                 # ④-1. 다음 셀 예약 및 충돌 회피 (낮은 id 우선 및 스왑 충돌 체크)
                 wait_count = 0
@@ -390,21 +420,17 @@ def create_app(port):
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
-                        # 현재 다른 AGV의 현재 셀와 다음 셀
                         other_current = (int(round(other.pos[0])), int(round(other.pos[1])))
                         if other.path and len(other.path) > 1:
                             other_next = other.path[1]
                         else:
                             other_next = other_current
-                        # 기존 조건: 다른 AGV의 다음 셀과 겹치는 경우 (낮은 id 우선)
                         if next_cell == other_next and other.id < agv.id:
                             collision = True
                             break
-                        # 추가 조건: 스왑 충돌 검사
                         if next_cell == other_current and other_next == current_cell:
                             collision = True
                             break
-                        # 물리적 거리 체크
                         dist = ((other.pos[0] - next_cell[0])**2 + (other.pos[1] - next_cell[1])**2)**0.5
                         if dist < 0.2 and other.id < agv.id:
                             collision = True
@@ -412,11 +438,10 @@ def create_app(port):
                     if collision:
                         wait_count += 1
                         if wait_count > max_wait:
-                            # 최대 대기 시간 초과 시, cargo 상태에 따라 새로운 목표 선택 및 경로 재설계
                             if agv.cargo == 0:
                                 target = find_nearest_shelf(current_cell, agv.id)
                             else:
-                                target = find_alternative_exit(current_cell, exclude=next_cell, current_agv_id=agv.id)
+                                target = find_nearest_exit(current_cell, agv.id)
                             new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int))
                             if new_path and len(new_path) > 1:
                                 agv.path = new_path
