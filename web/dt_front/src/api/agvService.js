@@ -1,5 +1,6 @@
 // services/agvService.js
 
+// 추후 aws에 배포할 때 API_BASE_URL을 변경해야 함
 const API_BASE_URL = "http://localhost:5000/api";
 
 export const agvService = {
