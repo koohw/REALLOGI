@@ -129,8 +129,8 @@
 import paho.mqtt.client as mqtt
 import json
 import time
-from simulation import map_data, ROWS, COLS, send_command_to_agv1, get_next_position, DEBUG_MODE, production_route  
-# production_route는 simulation.py에 정의됨
+from simulation import map_data, ROWS, COLS, send_command_to_agv1, get_next_position, DEBUG_MODE
+# production_route는 더 이상 사용하지 않습니다.
 
 # MQTT 브로커 및 토픽 설정
 BROKER = "broker.hivemq.com"
@@ -138,27 +138,28 @@ PORT = 1883
 TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 하드웨어가 상태/ACK 메시지를 송신하는 토픽
 TOPIC_COMMAND_TO_DEVICE = "simpy/commands"    # 서버가 하드웨어로 명령을 송신하는 토픽
 
-# 초기 위치 및 목표 설정
+# 초기 위치 설정: AGV1은 항상 (8, 0)에서 시작
 current_location = (8, 0)
-# 테스트 모드(DEBUG_MODE=True)에서는 도착 상태를 (0,0)으로, 운영 모드에서는 production_route를 사용
+# 개발 모드(DEBUG_MODE=True)에서는 도착 상태를 (0,0)으로, 운영 모드에서는 target_location을 None으로 하여
+# get_next_position 함수가 기본 동작(현재 위치에서 한 칸 위로 이동)을 수행하도록 합니다.
 if DEBUG_MODE:
     target_location = (0, 0)
 else:
-    target_location = production_route[0]
+    target_location = None
 
-# 메시지 전송 주기 관련 설정
+# 메시지 출력 주기 관련 설정
 PRINT_INTERVAL = 1.0  # 상태 메시지 출력 간격 (초)
 last_print_time = 0
 
-# MQTT 통신 관련 플래그 및 콜백 변수들
-comm_success = False      # 하드웨어와의 통신 성공 여부 플래그
-mqtt_callback = None      # ACK 수신 시 호출할 콜백 함수
-last_sent_command = None  # 마지막으로 전송한 명령 (중복 전송 방지용)
+# MQTT 통신 관련 변수들
+comm_success = False         # 하드웨어와의 최초 통신 성공 여부
+mqtt_callback = None         # ACK 수신 시 호출할 콜백 함수 (옵션)
+last_sent_command = None     # 마지막으로 전송한 명령 (중복 전송 방지용)
 
 # 마지막으로 전송한 AGV1의 방향을 저장하는 전역 변수
 last_direction = ""
 
-# MQTT 클라이언트 생성 (client_id를 명시하여 고유하게 설정)
+# MQTT 클라이언트 생성 (고유한 client_id 사용)
 client = mqtt.Client(client_id="server_client", protocol=mqtt.MQTTv311)
 
 # ----------------------------------------------------------------------------------
@@ -175,8 +176,10 @@ def on_connect(client, userdata, flags, rc):
 
 # ----------------------------------------------------------------------------------
 # on_message: 브로커로부터 메시지를 수신할 때 호출되는 콜백 함수
-# - ACK 메시지인 경우: 하드웨어와 통신 성공, 위치 업데이트, 방향 변화에 따른 정지 명령 처리, 다음 명령 전송
-# - ACK가 아닌 상태 메시지인 경우: 상태 정보 출력
+# - ACK 메시지인 경우: 하드웨어와 통신 성공, 위치 및 방향 업데이트, 
+#   이전 방향과 비교하여 변화가 있으면 QR 인식 여부에 따라 "STOP" 명령 전송,
+#   그리고 다음 "경로" 명령을 전송합니다.
+# - ACK가 아닌 상태 메시지인 경우: 상태 정보를 출력합니다.
 # ----------------------------------------------------------------------------------
 def on_message(client, userdata, msg):
     global current_location, last_print_time, comm_success, mqtt_callback, last_direction, target_location
@@ -196,7 +199,7 @@ def on_message(client, userdata, msg):
                 new_location = tuple(message.get("location", current_location))
                 current_location = new_location
 
-                # 새 방향 정보: 메시지에 "direction" 키가 있으면 그 값을 사용
+                # 새 방향 정보: 메시지에 "direction" 키가 있으면 그 값을 사용, 없으면 빈 문자열로 처리
                 new_direction = message.get("direction", "")
                 # 이전에 전송한 방향과 비교하여 변화가 있으면
                 if new_direction != last_direction:
@@ -210,17 +213,8 @@ def on_message(client, userdata, msg):
                 last_direction = new_direction
 
                 print(f"[서버] 하드웨어와 통신 성공: 이동 완료(ACK) 수신, 현재 위치: {new_location}")
-                # 운영 모드일 경우, 도착한 위치가 목표(target_location)와 같으면 production_route에서 다음 목표로 업데이트
-                if not DEBUG_MODE:
-                    if new_location == target_location:
-                        try:
-                            idx = production_route.index(target_location)
-                            target_location = production_route[(idx + 1) % len(production_route)]
-                        except Exception:
-                            target_location = production_route[0]
-                # 다음 명령 전송
+                # 운영 모드에서는 도착 상태를 사용하지 않으므로 target_location은 그대로 None
                 send_next_command()
-                # 등록된 콜백이 있다면 호출 (예: AGV1 상태 업데이트)
                 if mqtt_callback is not None:
                     state = message.get("state", "moving")
                     mqtt_callback(1, new_location, state)
@@ -241,13 +235,12 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"[서버] 메시지 처리 오류: {e}")
 
-# MQTT 클라이언트에 콜백 함수 등록
+# ----------------------------------------------------------------------------------
+# MQTT 클라이언트에 콜백 함수 등록 및 연결 시작
+# ----------------------------------------------------------------------------------
 client.on_connect = on_connect
 client.on_message = on_message
 
-# ----------------------------------------------------------------------------------
-# MQTT 클라이언트 연결 및 루프 시작
-# ----------------------------------------------------------------------------------
 print("[서버] MQTT 클라이언트 연결 시도 중...")
 client.connect(BROKER, PORT, 60)
 client.loop_start()
@@ -268,7 +261,8 @@ def send_command(command, data=None):
         print(f"[서버] 명령 전송 실패: {payload}")
 
 # ----------------------------------------------------------------------------------
-# send_next_command: 현재 위치와 목표(target_location)에 따라 다음 좌표를 계산해 "경로" 명령을 전송
+# send_next_command: 현재 위치(current_location)와 target_location에 따라
+# BFS 기반으로 다음 좌표를 계산해 "경로" 명령을 전송하는 함수
 # ----------------------------------------------------------------------------------
 def send_next_command():
     global current_location, target_location, last_sent_command
