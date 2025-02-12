@@ -292,7 +292,7 @@ const AGVMap = () => {
       </div>
 
       {/* 사이드 제어 패널 */}
-      <div className="w-80 flex-shrink-0">
+      <div className="w-96 flex-shrink-0">
         <AGVControlPanel
           selectedAgvs={selectedAgvs}
           onActionComplete={() => setSelectedAgvs([])}

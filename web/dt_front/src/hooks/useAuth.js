@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
+import { useDispatch } from "react-redux";
 import { authApi } from "../api/authApi";
+import { logout as logoutAction } from "../features/userSlice"; // 이름 변경
 
 export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
 
   useEffect(() => {
     checkAuth();
@@ -16,9 +19,11 @@ export const useAuth = () => {
         setUser(response.data);
       } else {
         setUser(null);
+        dispatch(logoutAction()); // 액션명 변경
       }
     } catch (error) {
       setUser(null);
+      dispatch(logoutAction()); // 액션명 변경
     } finally {
       setLoading(false);
     }
@@ -28,7 +33,7 @@ export const useAuth = () => {
     try {
       const response = await authApi.logout();
       if (response.success) {
-        setUser(null); // 로그아웃 시 user 상태 초기화
+        setUser(null);
       }
     } catch (error) {
       console.error("Logout failed:", error);
@@ -37,4 +42,3 @@ export const useAuth = () => {
 
   return { user, loading, logout, checkAuth };
 };
-
