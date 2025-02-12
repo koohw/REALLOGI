@@ -33,7 +33,7 @@ export default function Sidebar() {
         <div className="mt-8">
           <button
             onClick={handleLogout}
-            className="w-full p-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="w-1/2 p-4 bg-gray-300 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             로그아웃
           </button>
