@@ -69,15 +69,31 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   };
 
   const getCellStyle = (cellType) => {
+    const baseStyle = {
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+    };
+
     switch (cellType) {
       case 0:
-        return "bg-white border border-gray-100"; // 빈 공간도 테두리와 함께 표시
+        return {
+          ...baseStyle,
+          backgroundImage: "white",
+        };
       case 1:
-        return "bg-gray-200";
+        return {
+          ...baseStyle,
+          backgroundImage: "url(/images/box.jpg)",
+        };
       case 2:
-        return "bg-blue-100";
+        return {
+          backgroundColor: "rgb(224 242 254)", // 기존 하늘색 배경 유지
+        };
       default:
-        return "bg-white";
+        return {
+          backgroundColor: "white",
+        };
     }
   };
 
@@ -366,21 +382,19 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         >
           {/* Map Background */}
           {mapData.map((row, y) =>
-            row.map(
-              (cell, x) =>
-                cell !== 0 && (
-                  <div
-                    key={`${y}-${x}`}
-                    className={`absolute ${getCellStyle(cell)}`}
-                    style={{
-                      left: x * CELL_SIZE,
-                      top: y * CELL_SIZE,
-                      width: CELL_SIZE,
-                      height: CELL_SIZE,
-                    }}
-                  />
-                )
-            )
+            row.map((cell, x) => (
+              <div
+                key={`${y}-${x}`}
+                style={{
+                  ...getCellStyle(cell),
+                  position: "absolute",
+                  left: x * CELL_SIZE,
+                  top: y * CELL_SIZE,
+                  width: CELL_SIZE,
+                  height: CELL_SIZE,
+                }}
+              />
+            ))
           )}
 
           {/* AGVs Layer */}
