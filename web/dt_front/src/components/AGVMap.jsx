@@ -6,6 +6,9 @@ import {
   ArrowRight,
   Circle,
 } from "lucide-react";
+import { agvService } from "../api/agvService";
+import AGVControlPanel from "./AGVControlPanel";
+import TileMap from "./TileMap"; // Import the new TileMap component
 
 const AGVMap = () => {
   const [agvData, setAgvData] = useState([]);
@@ -17,18 +20,41 @@ const AGVMap = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [selectedAgvs, setSelectedAgvs] = useState([]);
 
   const mapData = [
-    [2, 2, 2, 2, 2, 2, 2],
-    [0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 1, 0],
-    [0, 1, 0, 1, 0, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 1, 0],
-    [0, 1, 0, 1, 0, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0],
-    [2, 2, 2, 2, 2, 2, 2],
+    [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
   ];
+
+  const handleAgvClick = (agv, e) => {
+    e.stopPropagation(); // 맵 드래그 이벤트와 충돌 방지
+
+    setSelectedAgvs((prev) => {
+      const isSelected = prev.some(
+        (selected) => selected.agv_id === agv.agv_id
+      );
+      if (isSelected) {
+        return prev.filter((selected) => selected.agv_id !== agv.agv_id);
+      } else {
+        return [...prev, agv];
+      }
+    });
+  };
+
+  const handleMapClick = () => {
+    setSelectedAgvs([]);
+  };
 
   const handleWheel = (e) => {
     e.preventDefault();
@@ -97,7 +123,7 @@ const AGVMap = () => {
 
     setAgvData([]);
 
-    const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
+    const eventSource = agvService.getAgvStream();
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.success && data.agvs) {
@@ -121,6 +147,15 @@ const AGVMap = () => {
           agvPositions.current.set(newAgv.agv_id, {
             x: newAgv.location_y,
             y: newAgv.location_x,
+          });
+
+          setSelectedAgvs((prev) => {
+            return prev.map((selectedAgv) => {
+              const updatedAgv = data.agvs.find(
+                (agv) => agv.agv_id === selectedAgv.agv_id
+              );
+              return updatedAgv || selectedAgv;
+            });
           });
         });
 
@@ -155,7 +190,7 @@ const AGVMap = () => {
         return "#22c55e";
       case "STOPPED":
         return "#EF4444";
-      case "EMERGENCY":
+      case "EMERGENCY(STOPPED)":
         return "#DC2626";
       case "UNLOADING":
         return "#F59E0B";
@@ -184,90 +219,84 @@ const AGVMap = () => {
   };
 
   return (
-    <div className="flex-1">
-      <div className="mb-1 text-sm text-gray-600">
-        Last Update: {formatTime(lastUpdate)}
-      </div>
-      <div
-        className="relative overflow-hidden border rounded-lg shadow-lg"
-        style={{
-          width: "100% - 2rem",
-          height: "calc(100vh - 400px)",
-        }}
-      >
-        <div
-          className="absolute w-full h-full cursor-move"
-          style={{
-            transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
-            transformOrigin: "0 0",
-            willChange: "transform",
-          }}
-          onWheel={handleWheel}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          <div className="absolute top-0 left-0 w-full h-full">
-            {mapData.map((row, y) => (
-              <div
-                key={`row-${y}`}
-                className="flex"
-                style={{ height: cellSize }}
-              >
-                {row.map((cell, x) => (
-                  <div
-                    key={`cell-${x}-${y}`}
-                    className={getCellClassName(cell)}
-                    style={{
-                      width: cellSize,
-                      height: cellSize,
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {agvData.map((agv) => {
-            const initialPos = agvPositions.current.get(agv.agv_id) || {
-              x: agv.location_y,
-              y: agv.location_x,
-            };
-            return (
-              <div
-                id={`agv-${agv.agv_id}`}
-                key={agv.agv_id}
-                className="absolute flex items-center justify-center rounded-full"
-                style={{
-                  width: cellSize * 0.8,
-                  height: cellSize * 0.8,
-                  left: cellSize * 0.1,
-                  top: cellSize * 0.1,
-                  transform: `translate(${initialPos.x * cellSize}px, ${
-                    initialPos.y * cellSize
-                  }px)`,
-                  backgroundColor: getAGVColor(agv.state),
-                  boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                  willChange: "transform",
-                  transition: "background-color 0.3s ease",
-                }}
-              >
-                <div className="transform transition-transform duration-300">
-                  {getDirectionArrow(agv.direction)}
-                </div>
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-1 py-0.2 rounded-full text-[8px] font-medium shadow-sm">
-                  {agv.agv_name}
-                </div>
-                {agv.issue && (
-                  <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-medium shadow-md">
-                    {agv.issue}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    <div className="flex gap-4 h-full w-full">
+      <div className="flex-1 flex flex-col">
+        <div className="mb-1 text-sm text-gray-600">
+          Last Update: {formatTime(lastUpdate)}
         </div>
+        <div
+          className="relative overflow-hidden border rounded-lg shadow-lg flex-1"
+          onClick={handleMapClick}
+        >
+          <div
+            className="absolute w-full h-full cursor-move"
+            style={{
+              transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+              transformOrigin: "0 0",
+              willChange: "transform",
+            }}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <TileMap mapData={mapData} cellSize={cellSize} />
+
+            {agvData.map((agv) => {
+              const initialPos = agvPositions.current.get(agv.agv_id) || {
+                x: agv.location_y,
+                y: agv.location_x,
+              };
+              const isSelected = selectedAgvs.some(
+                (selected) => selected.agv_id === agv.agv_id
+              );
+
+              return (
+                <div
+                  id={`agv-${agv.agv_id}`}
+                  key={agv.agv_id}
+                  className={`absolute flex items-center justify-center rounded-full cursor-pointer
+                    ${isSelected ? "ring-2 ring-blue-500 ring-offset-2" : ""}`}
+                  style={{
+                    width: cellSize * 0.8,
+                    height: cellSize * 0.8,
+                    left: cellSize * 0.1,
+                    top: cellSize * 0.1,
+                    transform: `translate(${initialPos.x * cellSize}px, ${
+                      initialPos.y * cellSize
+                    }px)`,
+                    backgroundColor: getAGVColor(agv.state),
+                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                    willChange: "transform",
+                    transition: "background-color 0.3s ease",
+                  }}
+                  onClick={(e) => handleAgvClick(agv, e)}
+                >
+                  <div className="transform transition-transform duration-300">
+                    {getDirectionArrow(agv.direction)}
+                  </div>
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-1 py-0.2 rounded-full text-[8px] font-medium shadow-sm">
+                    {agv.agv_name}
+                  </div>
+                  {agv.issue && (
+                    <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-medium shadow-md">
+                      {agv.issue}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 사이드 제어 패널 */}
+      <div className="w-80 flex-shrink-0">
+        <AGVControlPanel
+          selectedAgvs={selectedAgvs}
+          onActionComplete={() => setSelectedAgvs([])}
+        />
       </div>
     </div>
   );

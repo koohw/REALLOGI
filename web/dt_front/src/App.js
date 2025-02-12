@@ -13,7 +13,6 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { PersistGate } from "redux-persist/integration/react";
 import { rehydrate } from "./features/userSlice";
 import { useEffect } from "react";
-import SessionCleanupHandler from "./components/SessionCleanupHandler";
 
 function App() {
   return (
@@ -42,55 +41,53 @@ function MainApp() {
   }, [dispatch]);
 
   return (
-    <SessionCleanupHandler>
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/simulation"
-            element={
-              <ProtectedRoute>
-                <SimulationPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/agv-register"
-            element={
-              <ProtectedRoute>
-                <AgvRegisterPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/modify-info"
-            element={
-              <ProtectedRoute>
-                <ModifyInfoPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/monitor" element={<MonitorPage />} />
-        </Routes>
-      </BrowserRouter>
-    </SessionCleanupHandler>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/simulation"
+          element={
+            <ProtectedRoute>
+              <SimulationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agv-register"
+          element={
+            <ProtectedRoute>
+              <AgvRegisterPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modify-info"
+          element={
+            <ProtectedRoute>
+              <ModifyInfoPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/monitor" element={<MonitorPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
