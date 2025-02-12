@@ -9,9 +9,11 @@ import statistics
 from simpy.rt import RealtimeEnvironment
 from simpy import Environment
 from collections import deque, defaultdict
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -75,11 +77,6 @@ def is_in_corridor(cell):
     return (2 <= row <= 4) and (2 <= col <= 4)
 # ─────────────────────────────────────────────────────
 
-# 추가: pos_in_cell 함수 – 연속 좌표가 해당 셀의 중심(정수)로 간주되는지 확인
-def pos_in_cell(pos, cell):
-    # 여기서는 각 셀의 중심이 정수 좌표라고 가정
-    return int(round(pos[0])) == cell[0] and int(round(pos[1])) == cell[1]
-
 def create_app(port):
     """Create Flask application with specific port configuration"""
     app = Flask(__name__)
@@ -111,6 +108,7 @@ def create_app(port):
                     continue
                 if MAP[nr][nc] == 1:
                     continue
+                # ※ avoid_corridor 옵션: 목표가 아니면 통로 셀은 건너뛰기
                 if avoid_corridor and (nr, nc) != goal and is_in_corridor((nr, nc)):
                     continue
                 if (nr, nc) in cell_blocked and cell_blocked[(nr, nc)] > current_time:
@@ -138,7 +136,7 @@ def create_app(port):
             for agv in SIM_AGVS:
                 if current_agv_id is not None and agv.id == current_agv_id:
                     continue
-                if pos_in_cell(agv.pos, ex):
+                if (int(round(agv.pos[0])), int(round(agv.pos[1]))) == ex:
                     occupied = True
                     break
             if not occupied:
@@ -157,7 +155,7 @@ def create_app(port):
             for agv in SIM_AGVS:
                 if current_agv_id is not None and agv.id == current_agv_id:
                     continue
-                if pos_in_cell(agv.pos, ex):
+                if (int(round(agv.pos[0])), int(round(agv.pos[1]))) == ex:
                     occupied = True
                     break
             if not occupied:
@@ -174,7 +172,7 @@ def create_app(port):
             for agv in SIM_AGVS:
                 if current_agv_id is not None and agv.id == current_agv_id:
                     continue
-                if pos_in_cell(agv.pos, sh):
+                if (int(round(agv.pos[0])), int(round(agv.pos[1]))) == sh:
                     occupied = True
                     break
             if not occupied:
@@ -381,12 +379,14 @@ def create_app(port):
             if len(agv.path) > 1:
                 next_cell = agv.path[1]
 
-                # 현재 목표 재설계 (기존과 동일)
+                # ※ 현재 목표 재설계 (이 부분은 그대로 유지)
                 if agv.cargo == 0:
                     target = find_nearest_shelf(current_cell, agv.id)
                 else:
                     target = find_nearest_exit(current_cell, agv.id)
                 if is_in_corridor(next_cell):
+                    # 통로 내에 있는 AGV들의 id 리스트를 확인하고,
+                    # 자신이 최우선(가장 낮은 id)이 아니라면 avoid_corridor 옵션으로 경로 재탐색
                     corridor_ids = [other.id for other in SIM_AGVS if is_in_corridor((int(round(other.pos[0])), int(round(other.pos[1]))))]
                     if corridor_ids and agv.id != min(corridor_ids):
                         new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), avoid_corridor=True)
@@ -395,7 +395,7 @@ def create_app(port):
                             next_cell = agv.path[1]
                 # 기존 후진 기능 (피치 못할 경우)
                 cur_dir = (next_cell[0] - current_cell[0], next_cell[1] - current_cell[1])
-                if abs(cur_dir[0]) > 0 and abs(cur_dir[1]) < 1e-6:
+                if abs(cur_dir[0]) > 0 and abs(cur_dir[1]) < 1e-6:  # 수직 이동인 경우
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
@@ -408,37 +408,39 @@ def create_app(port):
                             if abs(other_dir[0]) > 0 and abs(other_dir[1]) < 1e-6 and (cur_dir[0] * other_dir[0] < 0):
                                 reverse_cell = (current_cell[0] - cur_dir[0], current_cell[1] - cur_dir[1])
                                 if 0 <= reverse_cell[0] < ROWS and 0 <= reverse_cell[1] < COLS and MAP[reverse_cell[0]][reverse_cell[1]] != 1:
-                                    occupied = any(pos_in_cell(o.pos, reverse_cell) for o in SIM_AGVS)
+                                    occupied = any((int(round(o.pos[0])), int(round(o.pos[1]))) == reverse_cell for o in SIM_AGVS)
                                     if not occupied and reverse_cell not in RESERVED_CELLS:
+                                        # 후진 경로: 현재 셀 -> reverse_cell -> 현재 셀 (대기)
                                         agv.path = [current_cell, reverse_cell, current_cell] + agv.path[1:]
                                         next_cell = agv.path[1]
                                         break
 
-                # ④-1. 다음 셀 예약 및 충돌 회피 – [수정]
-                # [수정]: 모든 AGV에 대해, 자신 외에 다른 AGV가 다음 셀에 *실제* 위치(연속값 기준)로 점유 중이면 충돌로 판단.
-                safety_margin = 0.5  # 안전 거리 threshold (기존 0.2보다 크게 설정)
+                # ④-1. 다음 셀 예약 및 충돌 회피 – **수정된 부분**  
+                # 기존에는 다른 AGV의 id가 낮은 경우에만 충돌로 판단했지만,
+                # 이제는 *모든* AGV가 해당 셀에 있는 경우를 충돌로 판단합니다.
                 wait_count = 0
-                max_wait = 50
+                max_wait = 50  # 0.1초씩 약 5초 대기
                 while True:
                     collision = False
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
-                        # 다른 AGV가 next_cell 영역 내에 있는지 확인
-                        if pos_in_cell(other.pos, next_cell):
+                        other_current = (int(round(other.pos[0])), int(round(other.pos[1])))
+                        # **추가: 다음 셀이 다른 AGV의 현재 위치와 동일하면 충돌**
+                        if next_cell == other_current:
                             collision = True
                             break
-                        # 기존 swap 충돌 체크
+                        # 기존 swap 충돌 체크 (두 AGV가 서로 자리 교환하는 경우, 우선순위가 낮으면 대기)
                         if other.path and len(other.path) > 1:
                             other_next = other.path[1]
                         else:
-                            other_next = (int(round(other.pos[0])), int(round(other.pos[1])))
+                            other_next = other_current
                         if next_cell == other_next and other.id < agv.id:
                             collision = True
                             break
-                        # 연속 좌표 기반 안전 거리 체크
+                        # 근접 거리 체크
                         dist = ((other.pos[0] - next_cell[0])**2 + (other.pos[1] - next_cell[1])**2)**0.5
-                        if dist < safety_margin:
+                        if dist < 0.2:
                             collision = True
                             break
                     if collision:
@@ -459,7 +461,7 @@ def create_app(port):
                     else:
                         break
 
-                # ④-2. 예약 처리: 다음 셀이 다른 AGV에 예약되어 있으면 대기
+                # ④-2. 예약 처리: 다음 셀이 이미 다른 AGV에 의해 예약되어 있으면 대기
                 while next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] != agv.id:
                     yield env.timeout(0.1)
                 RESERVED_CELLS[next_cell] = agv.id
@@ -489,6 +491,7 @@ def create_app(port):
                     agv.pos = current_pos
                     rounded_pos = (round(current_pos[0], 1), round(current_pos[1], 1))
                     stats.agv_stats[agv.id]["location_log"].append((env.now, rounded_pos))
+                # 이동 완료: 도착 처리 및 예약 해제
                 agv.pos = (float(next_cell[0]), float(next_cell[1]))
                 agv.arrival_time = env.now
                 if next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] == agv.id:
