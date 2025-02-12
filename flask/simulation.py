@@ -1,5 +1,3 @@
-# simulation.py
-
 import simpy
 import random
 import matplotlib.pyplot as plt
@@ -13,7 +11,7 @@ from datetime import datetime  # 실제 현실시간 사용
 
 # --------------------------------------------------
 # 로그 설정: 개발/디버깅 시 DEBUG, 운영 시 INFO 레벨로 설정
-DEBUG_MODE = False  # 개발/디버깅: True, 운영: False
+DEBUG_MODE = True  # 개발/디버깅: True, 운영: False
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
@@ -110,24 +108,6 @@ def bfs_path(grid, start, goal, obstacles):
                         queue.append(((nr, nc), path + [(nr, nc)]))
     return None
 
-# production_route: 운영 모드에서 사용할 순환 경로 (예시)
-production_route = [(8, 0), (7, 0), (7, 1), (6, 1), (5, 1), (5, 0)]
-
-def get_next_position(current, target):
-    # 운영 모드에서도 BFS 기반 경로 탐색 사용
-    if target is None:
-        # 운영 모드에서는 production_route를 사용하여 목표(target)를 갱신
-        try:
-            idx = production_route.index(current)
-            new_target = production_route[(idx + 1) % len(production_route)]
-        except ValueError:
-            new_target = production_route[0]
-        target = new_target
-    path = bfs_path(map_data, current, target, obstacles=set())
-    if path and len(path) > 1:
-        return path[1]
-    return current
-
 ##############################################################################
 # 4) 이동 방향 계산 함수
 ##############################################################################
@@ -177,15 +157,32 @@ def send_command_to_agv1(next_pos):
 ##############################################################################
 # 6) AGV 프로세스 및 이동 함수
 ##############################################################################
-MOVE_INTERVAL = 0.1  # 0.1초마다 한 칸 이동
+MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
 WAIT_INTERVAL = 1
 
 # 운영 모드에서는 실제 하드웨어 연동 사용을 위해 SIMULATE_MQTT는 False로 설정합니다.
-SIMULATE_MQTT = False
+SIMULATE_MQTT = True
 
 def random_start_position():
     # 시작 좌표를 항상 (8, 0)으로 반환하도록 수정
     return (8, 0)
+
+def get_next_position(current, target):
+    """
+    현재 위치(current)와 목표(target)를 기반으로 BFS 알고리즘을 사용하여 다음 좌표를 계산합니다.
+    운영 모드에서는 target이 None이면, 기본 동작으로 현재 위치에서 한 칸 위로 이동하는 기본 목표(default_target)를 사용합니다.
+    """
+    if target is None:
+        # 기본 목표: 현재 위치에서 한 칸 위로 이동
+        default_target = (current[0] - 1, current[1])
+        # 맵 경계 체크
+        if default_target[0] < 0 or default_target[0] >= ROWS or default_target[1] < 0 or default_target[1] >= COLS:
+            return current  # 경계를 벗어나면 현재 위치 유지
+        target = default_target
+    path = bfs_path(map_data, current, target, obstacles=set())
+    if path and len(path) > 1:
+        return path[1]
+    return current
 
 def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
     init_pos = random_start_position()
@@ -199,23 +196,25 @@ def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_c
     logging.debug("AGV %s 시작 위치: %s", agv_id, init_pos)
 
     while True:
+        # 선반(하역) 좌표로 이동
         unloading_target = random.choice(shelf_coords)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, unloading_target)
+        # 도착 후 10초간 하역 상태 유지
         with data_lock:
             shared_data["statuses"][key] = "UNLOADING"
             shared_data["directions"][key] = ""
         yield env.timeout(10)
+        # 출구 좌표로 이동
         exit_target = random.choice(exit_coords)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
+        # 5초 멈춤 (출구에서 멈춤)이 완료된 후 주문완료 카운터 증가
         yield env.timeout(5)
-        # 5초 멈춤이 완료된 후 주문완료 카운터 증가
         with data_lock:
             shared_data["order_completed"][key] += 1
-
 
 def move_to(env, agv_id, agv_positions, logs, target):
     key = f"AGV {agv_id+1}"
@@ -296,7 +295,7 @@ except ImportError:
     RealtimeEnvironment = simpy.Environment
 
 def simulation_main():
-    # 운영 모드에서는 AGV1의 시뮬레이션 프로세스를 실행하지 않음
+    # 운영 모드에서는 AGV 1의 시뮬레이션 프로세스를 실행하지 않음 (하드웨어 연동 사용)
     env = RealtimeEnvironment(factor=1, strict=False)
     NUM_AGV = 4
     agv_positions = {}
