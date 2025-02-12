@@ -6,3 +6,7 @@
 [2025-02-12 11:46:14,733] INFO: [2025-02-12T11:46:14.733558] AGV 2 도착 -> (2, 2)
 [2025-02-12 11:46:15,732] INFO: [2025-02-12T11:46:15.732317] AGV 3 도착 -> (0, 1)
 [2025-02-12 11:46:15,747] INFO: [2025-02-12T11:46:15.747791] AGV 1 도착 -> (0, 4)
+[2025-02-12 15:08:14,649] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+[2025-02-12 15:08:14,650] INFO: [33mPress CTRL+C to quit[0m
+[2025-02-12 15:08:25,629] INFO: [2025-02-12T15:08:25.629243] AGV 0 도착 -> (2, 4)
