@@ -1,175 +1,23 @@
-[2025-02-11 12:23:34,838] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+[2025-02-12 09:22:59,964] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:5000
-[2025-02-11 12:23:34,838] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 12:23:34,839] INFO:  * Restarting with stat
-[2025-02-11 12:23:35,711] WARNING:  * Debugger is active!
-[2025-02-11 12:23:35,713] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 12:23:37,600] INFO: 127.0.0.1 - - [11/Feb/2025 12:23:37] "[33mGET / HTTP/1.1[0m" 404 -
-[2025-02-11 12:23:37,646] INFO: 127.0.0.1 - - [11/Feb/2025 12:23:37] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
-[2025-02-11 12:23:38,823] INFO: [2025-02-11T12:23:38.823394] AGV 1 도착 -> (5, 2)
-[2025-02-11 12:23:39,701] INFO: [2025-02-11T12:23:39.701362] AGV 2 도착 -> (5, 4)
-[2025-02-11 12:23:39,847] INFO: 127.0.0.1 - - [11/Feb/2025 12:23:39] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 12:23:43,823] INFO: [2025-02-11T12:23:43.823366] AGV 3 도착 -> (2, 2)
-[2025-02-11 12:23:44,223] INFO: [2025-02-11T12:23:44.223489] AGV 0 도착 -> (2, 6)
-[2025-02-11 12:23:44,823] INFO: [2025-02-11T12:23:44.823549] AGV 2 도착 -> (5, 6)
-[2025-02-11 12:23:45,101] INFO: [2025-02-11T12:23:45.100987] AGV 0 도착 -> (2, 2)
-[2025-02-11 14:15:39,322] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+[2025-02-12 09:22:59,964] INFO: [33mPress CTRL+C to quit[0m
+[2025-02-12 09:23:00,857] INFO: [2025-02-12T09:23:00.857012] AGV 2 도착 -> (2, 2)
+[2025-02-12 09:23:01,056] INFO: [2025-02-12T09:23:01.056593] AGV 1 도착 -> (2, 4)
+[2025-02-12 09:23:01,256] INFO: [2025-02-12T09:23:01.256571] AGV 3 도착 -> (5, 6)
+[2025-02-12 09:23:02,009] INFO: 127.0.0.1 - - [12/Feb/2025 09:23:02] "[33mGET / HTTP/1.1[0m" 404 -
+[2025-02-12 09:23:02,049] INFO: 127.0.0.1 - - [12/Feb/2025 09:23:02] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+[2025-02-12 09:23:05,980] INFO: 127.0.0.1 - - [12/Feb/2025 09:23:05] "GET /api/agv-stream HTTP/1.1" 200 -
+[2025-02-12 09:23:11,256] INFO: [2025-02-12T09:23:11.256736] AGV 2 도착 -> (0, 1)
+[2025-02-12 09:23:11,556] INFO: [2025-02-12T09:23:11.556701] AGV 1 도착 -> (0, 2)
+[2025-02-12 09:27:47,529] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on http://127.0.0.1:5000
-[2025-02-11 14:15:39,323] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:15:39,324] INFO:  * Restarting with stat
-[2025-02-11 14:15:40,242] WARNING:  * Debugger is active!
-[2025-02-11 14:15:40,244] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:15:41,077] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:41] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:43,981] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:43] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:44,616] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:44] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:44,924] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:44] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:45,155] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:45] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:45,262] INFO: [2025-02-11T14:15:45.262604] AGV 2 도착 -> (5, 4)
-[2025-02-11 14:15:45,381] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:45] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:45,622] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:45] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:45,844] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:45] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:46,058] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:46] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:46,279] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:46] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:48,230] INFO: [2025-02-11T14:15:48.230501] AGV 3 도착 -> (5, 6)
-[2025-02-11 14:15:56,531] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 14:15:56,531] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:15:56,533] INFO:  * Restarting with stat
-[2025-02-11 14:15:57,480] WARNING:  * Debugger is active!
-[2025-02-11 14:15:57,482] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:15:57,492] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:57] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:59,030] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:59] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:15:59,697] INFO: 127.0.0.1 - - [11/Feb/2025 14:15:59] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:00,362] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:00] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:00,801] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:00] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:00,984] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:00] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,143] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,311] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,473] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,516] INFO: [2025-02-11T14:16:01.516304] AGV 3 도착 -> (5, 2)
-[2025-02-11 14:16:01,630] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,804] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:01,965] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:01] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:02,116] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:02] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:02,277] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:02] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:02,427] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:02] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:02,570] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:02] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:03,466] INFO: [2025-02-11T14:16:03.466623] AGV 2 도착 -> (5, 6)
-[2025-02-11 14:16:21,444] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 14:16:21,444] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:16:21,446] INFO:  * Restarting with stat
-[2025-02-11 14:16:22,442] WARNING:  * Debugger is active!
-[2025-02-11 14:16:22,446] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:16:23,622] INFO: 127.0.0.1 - - [11/Feb/2025 14:16:23] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:16:28,430] INFO: [2025-02-11T14:16:28.430138] AGV 1 도착 -> (2, 6)
-[2025-02-11 14:16:28,430] INFO: [2025-02-11T14:16:28.430786] AGV 2 도착 -> (2, 4)
-[2025-02-11 14:16:28,431] INFO: [2025-02-11T14:16:28.431149] AGV 3 도착 -> (5, 4)
-[2025-02-11 14:18:04,828] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 14:18:04,829] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:18:04,831] INFO:  * Restarting with stat
-[2025-02-11 14:18:05,763] WARNING:  * Debugger is active!
-[2025-02-11 14:18:05,768] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:18:05,774] INFO: 127.0.0.1 - - [11/Feb/2025 14:18:05] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:18:26,516] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 14:18:26,516] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:18:26,518] INFO:  * Restarting with stat
-[2025-02-11 14:18:27,522] WARNING:  * Debugger is active!
-[2025-02-11 14:18:27,524] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:18:27,530] INFO: 127.0.0.1 - - [11/Feb/2025 14:18:27] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 14:18:30,501] INFO: [2025-02-11T14:18:30.500957] AGV 2 도착 -> (5, 6)
-[2025-02-11 14:23:30,657] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 14:23:30,657] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 14:23:30,659] INFO:  * Restarting with stat
-[2025-02-11 14:23:31,710] WARNING:  * Debugger is active!
-[2025-02-11 14:23:31,713] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 14:23:36,626] INFO: [2025-02-11T14:23:36.626282] AGV 3 도착 -> (5, 4)
-[2025-02-11 14:23:37,684] INFO: [2025-02-11T14:23:37.684082] AGV 1 도착 -> (5, 2)
-[2025-02-11 14:23:38,626] INFO: [2025-02-11T14:23:38.626239] AGV 2 도착 -> (5, 6)
-[2025-02-11 14:23:40,684] INFO: [2025-02-11T14:23:40.684052] AGV 3 도착 -> (2, 4)
-[2025-02-11 14:23:43,684] INFO: [2025-02-11T14:23:43.683991] AGV 2 도착 -> (5, 6)
-[2025-02-11 14:23:47,625] INFO: [2025-02-11T14:23:47.625664] AGV 1 도착 -> (2, 6)
-[2025-02-11 15:25:10,188] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 15:25:10,188] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 15:25:10,190] INFO:  * Restarting with stat
-[2025-02-11 15:25:11,299] WARNING:  * Debugger is active!
-[2025-02-11 15:25:11,301] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 15:25:17,273] INFO: [2025-02-11T15:25:17.273145] AGV 2 도착 -> (5, 2)
-[2025-02-11 15:25:18,163] INFO: [2025-02-11T15:25:18.163752] AGV 2 도착 -> (2, 2)
-[2025-02-11 15:25:18,272] INFO: [2025-02-11T15:25:18.272851] AGV 1 도착 -> (2, 6)
-[2025-02-11 15:47:19,906] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 15:47:19,907] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 15:47:19,908] INFO:  * Restarting with stat
-[2025-02-11 15:47:21,019] WARNING:  * Debugger is active!
-[2025-02-11 15:47:21,021] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 15:47:21,027] INFO: 127.0.0.1 - - [11/Feb/2025 15:47:21] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 15:47:24,878] INFO: [2025-02-11T15:47:24.878807] AGV 2 도착 -> (5, 4)
-[2025-02-11 15:47:25,879] INFO: [2025-02-11T15:47:25.878925] AGV 3 도착 -> (5, 2)
-[2025-02-11 15:47:25,993] INFO: [2025-02-11T15:47:25.993274] AGV 2 도착 -> (5, 2)
-[2025-02-11 15:47:26,879] INFO: [2025-02-11T15:47:26.879250] AGV 1 도착 -> (5, 6)
-[2025-02-11 15:47:29,993] INFO: [2025-02-11T15:47:29.993575] AGV 1 도착 -> (2, 4)
-[2025-02-11 15:47:41,385] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 15:47:41,385] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 15:47:41,387] INFO:  * Restarting with stat
-[2025-02-11 15:47:42,446] WARNING:  * Debugger is active!
-[2025-02-11 15:47:42,449] INFO:  * Debugger PIN: 479-810-414
-[2025-02-11 15:47:42,456] INFO: 127.0.0.1 - - [11/Feb/2025 15:47:42] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 15:47:45,358] INFO: [2025-02-11T15:47:45.357919] AGV 3 도착 -> (5, 6)
-[2025-02-11 15:47:48,357] INFO: [2025-02-11T15:47:48.357598] AGV 1 도착 -> (5, 4)
-[2025-02-11 15:47:51,424] INFO: [2025-02-11T15:47:51.424060] AGV 1 도착 -> (2, 6)
-[2025-02-11 15:47:51,425] INFO: [2025-02-11T15:47:51.425242] AGV 2 도착 -> (5, 6)
-[2025-02-11 15:47:51,426] INFO: [2025-02-11T15:47:51.426016] AGV 3 도착 -> (5, 4)
-[2025-02-11 15:47:57,358] INFO: [2025-02-11T15:47:57.358368] AGV 2 도착 -> (5, 6)
-[2025-02-11 15:48:03,357] INFO: [2025-02-11T15:48:03.357882] AGV 3 도착 -> (0, 4)
-[2025-02-11 15:48:09,357] INFO: [2025-02-11T15:48:09.357899] AGV 1 도착 -> (0, 5)
-[2025-02-11 15:48:11,357] INFO: [2025-02-11T15:48:11.357724] AGV 3 도착 -> (2, 4)
-[2025-02-11 15:48:12,423] INFO: [2025-02-11T15:48:12.423600] AGV 2 도착 -> (0, 1)
-[2025-02-11 15:48:13,357] INFO: [2025-02-11T15:48:13.357648] AGV 2 도착 -> (0, 6)
-[2025-02-11 15:48:13,424] INFO: [2025-02-11T15:48:13.424120] AGV 3 도착 -> (0, 2)
-[2025-02-11 16:02:44,940] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 16:02:44,940] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 16:02:51,939] INFO: [2025-02-11T16:02:51.939500] AGV 3 도착 -> (2, 6)
-[2025-02-11 16:02:54,928] INFO: [2025-02-11T16:02:54.928602] AGV 1 도착 -> (5, 6)
-[2025-02-11 16:02:55,928] INFO: [2025-02-11T16:02:55.928624] AGV 2 도착 -> (2, 4)
-[2025-02-11 16:03:04,928] INFO: [2025-02-11T16:03:04.928602] AGV 3 도착 -> (0, 6)
-[2025-02-11 16:39:51,510] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 16:39:51,511] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 16:39:58,498] INFO: [2025-02-11T16:39:58.498525] AGV 1 도착 -> (2, 4)
-[2025-02-11 16:40:02,498] INFO: [2025-02-11T16:40:02.498512] AGV 2 도착 -> (2, 6)
-[2025-02-11 16:40:02,499] INFO: [2025-02-11T16:40:02.499688] AGV 3 도착 -> (2, 2)
-[2025-02-11 16:40:16,498] INFO: [2025-02-11T16:40:16.498261] AGV 2 도착 -> (0, 5)
-[2025-02-11 16:40:17,498] INFO: [2025-02-11T16:40:17.498721] AGV 3 도착 -> (0, 4)
-[2025-02-11 16:40:25,498] INFO: [2025-02-11T16:40:25.498241] AGV 2 도착 -> (2, 4)
-[2025-02-11 16:40:30,498] INFO: [2025-02-11T16:40:30.498547] AGV 3 도착 -> (5, 2)
-[2025-02-11 16:40:39,498] INFO: [2025-02-11T16:40:39.498737] AGV 2 도착 -> (0, 3)
-[2025-02-11 17:12:15,158] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 17:12:15,158] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 17:12:16,490] INFO: 127.0.0.1 - - [11/Feb/2025 17:12:16] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 17:12:23,148] INFO: [2025-02-11T17:12:23.148715] AGV 1 도착 -> (2, 6)
-[2025-02-11 17:12:23,149] INFO: [2025-02-11T17:12:23.149813] AGV 3 도착 -> (5, 2)
-[2025-02-11 17:12:24,149] INFO: [2025-02-11T17:12:24.148891] AGV 2 도착 -> (5, 6)
-[2025-02-11 17:12:37,148] INFO: [2025-02-11T17:12:37.148898] AGV 1 도착 -> (0, 5)
-[2025-02-11 17:12:39,149] INFO: [2025-02-11T17:12:39.148997] AGV 3 도착 -> (0, 2)
-[2025-02-11 17:12:50,170] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 17:12:50,170] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 17:12:57,158] INFO: [2025-02-11T17:12:57.158863] AGV 3 도착 -> (2, 6)
-[2025-02-11 17:12:59,158] INFO: [2025-02-11T17:12:59.158636] AGV 2 도착 -> (5, 6)
-[2025-02-11 17:13:01,159] INFO: [2025-02-11T17:13:01.159604] AGV 1 도착 -> (5, 4)
-[2025-02-11 17:13:07,575] INFO: 127.0.0.1 - - [11/Feb/2025 17:13:07] "GET /api/agv-stream HTTP/1.1" 200 -
-[2025-02-11 17:15:49,809] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on http://127.0.0.1:5000
-[2025-02-11 17:15:49,810] INFO: [33mPress CTRL+C to quit[0m
-[2025-02-11 17:15:57,797] INFO: [2025-02-11T17:15:57.796957] AGV 1 도착 -> (2, 4)
-[2025-02-11 17:15:58,796] INFO: [2025-02-11T17:15:58.796634] AGV 2 도착 -> (5, 2)
-[2025-02-11 17:16:10,797] INFO: [2025-02-11T17:16:10.797148] AGV 1 도착 -> (0, 4)
-[2025-02-11 17:16:10,798] INFO: [2025-02-11T17:16:10.798144] AGV 3 도착 -> (5, 2)
+[2025-02-12 09:27:47,529] INFO: [33mPress CTRL+C to quit[0m
+[2025-02-12 09:27:47,713] INFO: 127.0.0.1 - - [12/Feb/2025 09:27:47] "GET /api/agv-stream HTTP/1.1" 200 -
+[2025-02-12 09:27:48,524] INFO: [2025-02-12T09:27:48.524771] AGV 1 도착 -> (5, 6)
+[2025-02-12 09:27:48,545] INFO: 127.0.0.1 - - [12/Feb/2025 09:27:48] "GET /api/agv-stream HTTP/1.1" 200 -
+[2025-02-12 09:27:48,724] INFO: [2025-02-12T09:27:48.724793] AGV 3 도착 -> (2, 4)
+[2025-02-12 09:27:58,824] INFO: [2025-02-12T09:27:58.824829] AGV 2 도착 -> (5, 6)
+[2025-02-12 09:27:59,124] INFO: [2025-02-12T09:27:59.124603] AGV 1 도착 -> (0, 6)
+[2025-02-12 09:27:59,324] INFO: [2025-02-12T09:27:59.324875] AGV 3 도착 -> (0, 1)
+[2025-02-12 09:28:04,425] INFO: [2025-02-12T09:28:04.425071] AGV 1 도착 -> (2, 6)
+[2025-02-12 09:28:04,924] INFO: [2025-02-12T09:28:04.924909] AGV 3 도착 -> (2, 4)

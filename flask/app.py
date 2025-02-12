@@ -51,7 +51,11 @@ def event_stream():
                     "realtime": realtime
                 }
                 agv_list.append(agv_data)
-            data = {"success": True, "agv_number": len(agv_list), "agvs": agv_list}
+            order_success = shared_data.get("order_completed", {})
+            data = {"success": True, 
+                    "agv_number": len(agv_list), 
+                    "agvs": agv_list,
+                    "order_success": order_success}
         yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         time.sleep(1)
 

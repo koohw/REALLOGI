@@ -78,7 +78,13 @@ shared_data = {
         "AGV 4": ""
     },
     "agv1_target": None,
-    "agv1_moving_ack": False
+    "agv1_moving_ack": False,
+    "order_completed": {  # 주문완료 카운터 추가
+        "AGV 1": 0,
+        "AGV 2": 0,
+        "AGV 3": 0,
+        "AGV 4": 0
+    }
 }
 
 ##############################################################################
@@ -104,33 +110,23 @@ def bfs_path(grid, start, goal, obstacles):
                         queue.append(((nr, nc), path + [(nr, nc)]))
     return None
 
-def get_next_position(current, target):
-    if target is None:
-        d = shared_data["directions"].get("AGV 1", "")
-        print(f"[DEBUG] current: {current}, direction: {d}")
-        if d == "u":
-            candidate = (current[0] - 1, current[1])
-        elif d == "d":
-            candidate = (current[0] + 1, current[1])
-        elif d == "R":
-            candidate = (current[0], current[1] + 1)
-        elif d == "L":
-            candidate = (current[0], current[1] - 1)
-        else:
-            candidate = (current[0] - 1, current[1])
-        print(f"[DEBUG] candidate before boundary check: {candidate}")
-        row, col = candidate
-        if row < 0 or row >= ROWS or col < 0 or col >= COLS:
-            print("[DEBUG] candidate out-of-bound, returning current")
-            return current
-        print(f"[DEBUG] candidate accepted: {candidate}")
-        return candidate
-    else:
-        path = bfs_path(map_data, current, target, obstacles=set())
-        if path and len(path) > 1:
-            return path[1]
-        return current
+# production_route: 운영 모드에서 사용할 순환 경로 (예시)
+production_route = [(8, 0), (7, 0), (7, 1), (6, 1), (5, 1), (5, 0)]
 
+def get_next_position(current, target):
+    # 운영 모드에서도 BFS 기반 경로 탐색 사용
+    if target is None:
+        # 운영 모드에서는 production_route를 사용하여 목표(target)를 갱신
+        try:
+            idx = production_route.index(current)
+            new_target = production_route[(idx + 1) % len(production_route)]
+        except ValueError:
+            new_target = production_route[0]
+        target = new_target
+    path = bfs_path(map_data, current, target, obstacles=set())
+    if path and len(path) > 1:
+        return path[1]
+    return current
 
 ##############################################################################
 # 4) 이동 방향 계산 함수
@@ -181,15 +177,15 @@ def send_command_to_agv1(next_pos):
 ##############################################################################
 # 6) AGV 프로세스 및 이동 함수
 ##############################################################################
-MOVE_INTERVAL = 1
+MOVE_INTERVAL = 0.1  # 0.1초마다 한 칸 이동
 WAIT_INTERVAL = 1
 
-# 시뮬레이션 모드: 실제 운영모드에서는 하드웨어 연동 사용을 위해 False로 설정합니다.
+# 운영 모드에서는 실제 하드웨어 연동 사용을 위해 SIMULATE_MQTT는 False로 설정합니다.
 SIMULATE_MQTT = False
 
 def random_start_position():
-    candidates = [(8, c) for c in range(COLS) if map_data[8][c] == 2]
-    return random.choice(candidates) if candidates else (8, 0)
+    # 시작 좌표를 항상 (8, 0)으로 반환하도록 수정
+    return (8, 0)
 
 def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
     init_pos = random_start_position()
@@ -216,6 +212,10 @@ def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_c
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
         yield env.timeout(5)
+        # 5초 멈춤이 완료된 후 주문완료 카운터 증가
+        with data_lock:
+            shared_data["order_completed"][key] += 1
+
 
 def move_to(env, agv_id, agv_positions, logs, target):
     key = f"AGV {agv_id+1}"
@@ -243,7 +243,6 @@ def move_to(env, agv_id, agv_positions, logs, target):
                 occupied_for_blocker = set(agv_positions.values())
                 occupied_for_blocker.discard(agv_positions[blocker])
                 blocker_deadlocked = is_deadlocked(agv_positions[blocker], occupied_for_blocker)
-
                 if our_distance > blocker_distance:
                     with data_lock:
                         shared_data["statuses"][key] = "STOPPED"
@@ -251,16 +250,13 @@ def move_to(env, agv_id, agv_positions, logs, target):
                     yield env.timeout(WAIT_INTERVAL)
                     continue
                 elif our_distance == blocker_distance:
-                    if blocker_deadlocked:
-                        pass
-                    else:
+                    if not blocker_deadlocked:
                         with data_lock:
                             shared_data["statuses"][key] = "STOPPED"
                             shared_data["directions"][key] = ""
                         yield env.timeout(WAIT_INTERVAL)
                         continue
 
-            # AGV1의 경우, SIMULATE_MQTT가 True면 시뮬레이션 모드, 아니면 하드웨어 ACK 기반 처리
             if agv_id == 0 and SIMULATE_MQTT:
                 with data_lock:
                     shared_data["agv1_target"] = next_pos
@@ -346,12 +342,14 @@ def animate_simulation(logs):
                 rr, cc = pos_list[-1]
                 circle = plt.Circle((cc + 0.5, rr + 0.5), 0.3, color=colors[agv_id % len(colors)])
                 ax.add_patch(circle)
-        ax.set_title(f"AGV 시뮬레이션 - 시간: {frame}")
+        # 주문 완료 카운터도 표시 (옵션)
+        order_completed = shared_data.get("order_completed", {})
+        ax.set_title(f"AGV 시뮬레이션 - 시간: {frame}, 주문완료: {order_completed}")
     ani = animation.FuncAnimation(
         fig, update,
         frames=range(0, 1000),
         init_func=init,
-        interval=1000,
+        interval=100,  # 100ms 간격 (0.1초)
         blit=False
     )
     plt.show()
