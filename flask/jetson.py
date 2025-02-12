@@ -206,3 +206,11 @@ except KeyboardInterrupt:
     GPIO.cleanup()
     client.loop_stop()
     client.disconnect()
+
+
+
+
+
+# def notify_blockage(current_location):
+#     payload = {"ack": False, "blocked": True, "location": list(current_location), "state": "STOPPED"}
+#     client.publish(TOPIC_STATUS_FROM_DEVICE, json.dumps(payload))
