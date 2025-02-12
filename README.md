@@ -8,6 +8,10 @@
 
 ![alt text](image.png)
 
+02/03 simulation 상 알고리즘 구현
+
+02/04 json 데이터 양식 확정 및 해당 양식에 맞게 데이터 수정
+
 
 
 02/12 잿슨과의 mqtt수정
