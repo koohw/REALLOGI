@@ -205,18 +205,18 @@ const AGVMap = () => {
     return date.toLocaleTimeString();
   };
 
-  const getCellClassName = (cell) => {
-    switch (cell) {
-      case 0:
-        return "bg-white";
-      case 1:
-        return "bg-gray-100";
-      case 2:
-        return "bg-sky-100";
-      default:
-        return "bg-white";
-    }
-  };
+  // const getCellClassName = (cell) => {
+  //   switch (cell) {
+  //     case 0:
+  //       return "bg-white";
+  //     case 1:
+  //       return "bg-gray-100";
+  //     case 2:
+  //       return "bg-sky-100";
+  //     default:
+  //       return "bg-white";
+  //   }
+  // };
 
   return (
     <div className="flex gap-4 h-full w-full">
