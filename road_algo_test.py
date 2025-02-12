@@ -2,6 +2,7 @@ import simpy
 import math
 import random
 from collections import deque, defaultdict
+from heapq import heappush, heappop
 
 # ------------------------------
 # 테스트용 그리드 및 상수 설정
@@ -30,37 +31,71 @@ SPEED_VARIABILITY = (0.8, 1.2)
 SAFETY_MARGIN = 0.5
 
 # ------------------------------
-# BFS 경로 탐색 함수 (변경 없음)
+# 통로 판별 함수 (예시)
 # ------------------------------
-def bfs_path(start, goal, current_time, cell_blocked, congestion_count):
+def is_in_corridor(cell):
+    """예시: row가 2~4, col이 2~4인 영역을 통로로 간주"""
+    row, col = cell
+    return (2 <= row <= 4) and (2 <= col <= 4)
+
+# ------------------------------
+# 다익스트라 알고리즘을 이용한 경로 탐색 함수
+# ------------------------------
+def dijkstra_path(start, goal, current_time, cell_blocked, congestion_count):
+    # 시작 셀과 목표 셀이 같으면 바로 리턴
     if start == goal:
         return [start]
-    visited = {start: None}
-    queue = deque([start])
-    while queue:
-        r, c = queue.popleft()
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc
+
+    dist = {}     # 각 셀까지의 최소 비용
+    prev = {}     # 최단 경로를 재구성하기 위한 부모 노드 정보
+    dist[start] = 0
+    # 우선순위 큐: (누적 비용, 셀)
+    heap = [(0, start)]
+    
+    while heap:
+        cost, cell = heappop(heap)
+        if cell == goal:
+            break
+        if cost > dist.get(cell, float('inf')):
+            continue
+        r, c = cell
+        for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nr, nc = r+dr, c+dc
+            neighbor = (nr, nc)
+            # 경계 검사 및 장애물 건너뛰기
             if not (0 <= nr < ROWS and 0 <= nc < COLS):
                 continue
             if MAP[nr][nc] == 1:
                 continue
-            if (nr, nc) in cell_blocked and cell_blocked[(nr, nc)] > current_time:
-                congestion_count[(nr, nc)] += 1
-                continue
-            if (nr, nc) in visited:
-                continue
-            visited[(nr, nc)] = (r, c)
-            queue.append((nr, nc))
-            if (nr, nc) == goal:
-                path = []
-                cur = (nr, nc)
-                while cur is not None:
-                    path.append(cur)
-                    cur = visited[cur]
-                path.reverse()
-                return path
-    return None
+            # 기본 이동 비용은 1
+            base_cost = 1
+            penalty = 0
+            # 만약 셀이 cell_blocked에 있고, 아직 블록이 유지되고 있다면 높은 패널티 부여
+            if neighbor in cell_blocked and cell_blocked[neighbor] > current_time:
+                penalty += 10
+            # congestion_count(혼잡도)도 비용에 추가
+            penalty += congestion_count[neighbor]
+            # 만약 해당 셀이 통로에 속한다면(위험도가 높다고 가정) 추가 비용 부여
+            if is_in_corridor(neighbor):
+                penalty += 2
+            new_cost = cost + base_cost + penalty
+            if new_cost < dist.get(neighbor, float('inf')):
+                dist[neighbor] = new_cost
+                prev[neighbor] = cell
+                heappush(heap, (new_cost, neighbor))
+    
+    # 목표 셀이 도달 불가능하다면 None 리턴
+    if goal not in dist:
+        return None
+
+    # 경로 재구성
+    path = []
+    cell = goal
+    while cell is not None:
+        path.append(cell)
+        cell = prev.get(cell)
+    path.reverse()
+    return path
 
 # ------------------------------
 # AGV 클래스
@@ -71,64 +106,64 @@ class AGV:
         # 현재 위치: 실수 좌표 (셀 중심)
         self.pos = (float(start_pos[0]), float(start_pos[1]))
         self.goal = goal            # 목표 셀 (정수 좌표)
-        self.path = []              # 경로 (BFS 결과: 정수 좌표 리스트)
+        self.path = []              # 경로 (다익스트라 결과: 정수 좌표 리스트)
         self.last_moved_time = 0    # 마지막 이동 시각
 
 # ------------------------------
-# AGV 이동 프로세스 (속도 변동성을 부여)
+# AGV 이동 프로세스 (속도 변동성 부여)
 # ------------------------------
 def agv_process(env, agv, cell_blocked):
     """
-    AGV가 BFS 경로를 계산한 후, 경로 상의 각 셀 사이를 이동합니다.
-    단, 각 TIME_STEP마다 실제 이동 속도는 BASE_SPEED에 일정한 변동성을 가진 랜덤 계수를 곱한 값으로 결정됩니다.
+    AGV가 다익스트라 알고리즘을 이용하여 경로를 계산한 후,
+    경로 상의 각 셀 사이를 TIME_STEP마다 보간(interpolate)하며 이동합니다.
+    각 세그먼트 이동 시, BASE_SPEED에 [SPEED_VARIABILITY] 범위의 랜덤 계수를 곱하여 속도 변동성을 부여합니다.
     """
+    # 혼잡도 정보 (이 함수 내에서만 사용)
     congestion = defaultdict(int)
     current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
-    # 초기 경로 계산
-    agv.path = bfs_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
+    # 초기 경로 계산 (다익스트라 사용)
+    agv.path = dijkstra_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
     agv.last_moved_time = env.now
 
     while agv.path and env.now < 1000:
-        # 경로가 1칸 이하면 종료 (목표 도달)
+        # 목표 도착 시 종료
         if len(agv.path) <= 1:
             break
 
         # 다음 셀 선택: 경로의 두 번째 원소
         next_cell = agv.path[1]
 
-        # 현재 셀과 다음 셀의 중심 좌표 (실수형)
+        # 현재 셀과 다음 셀의 중심 좌표
         current_center = (float(agv.pos[0]), float(agv.pos[1]))
         next_center = (float(next_cell[0]), float(next_cell[1]))
         dx = next_center[0] - current_center[0]
         dy = next_center[1] - current_center[1]
         distance = math.sqrt(dx*dx + dy*dy)
         
-        # 매 step마다 속도 변동성을 부여하여 실제 속도 결정
-        # effective_speed = BASE_SPEED * random_factor (random_factor ∈ [SPEED_VARIABILITY[0], SPEED_VARIABILITY[1]])
+        # 매 세그먼트마다 속도 변동성을 반영한 effective_speed 결정
         effective_speed = BASE_SPEED * random.uniform(*SPEED_VARIABILITY)
         interp_distance = effective_speed * TIME_STEP
         num_steps = max(1, int(distance / interp_distance))
         step_dx = dx / num_steps
         step_dy = dy / num_steps
 
-        # 보간 이동: 매 TIME_STEP마다 이동
+        # 보간 이동: 각 TIME_STEP마다 이동
         for _ in range(num_steps):
             yield env.timeout(TIME_STEP)
-            # 매 step마다 속도 변동성을 다시 적용할 수도 있지만 여기서는 각 세그먼트에 대해 한 번의 effective_speed로 진행
             new_x = agv.pos[0] + step_dx
             new_y = agv.pos[1] + step_dy
             agv.pos = (new_x, new_y)
             agv.last_moved_time = env.now
 
-        # 보간 후 정확히 다음 셀 중심으로 보정
+        # 보간 이동 후 정확히 다음 셀 중심으로 보정
         agv.pos = (next_center[0], next_center[1])
         agv.last_moved_time = env.now
-        # 도착한 셀은 경로에서 제거
+        # 경로 업데이트: 도착한 셀 제거
         agv.path.pop(0)
         current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
         if current_cell != agv.goal:
-            # 남은 경로 재계산 (BFS)
-            agv.path = bfs_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
+            # 남은 경로 재계산 (다익스트라 사용)
+            agv.path = dijkstra_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
         else:
             break
 
@@ -152,7 +187,7 @@ def monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_tim
             for j in range(i+1, len(agvs)):
                 pos_i = agvs[i].pos
                 pos_j = agvs[j].pos
-                dist = math.hypot(pos_i[0] - pos_j[0], pos_i[1] - pos_j[1])
+                dist = math.hypot(pos_i[0]-pos_j[0], pos_i[1]-pos_j[1])
                 if dist < SAFETY_MARGIN:
                     collision_detected = True
                     break
@@ -180,7 +215,7 @@ def monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_tim
 def run_simulation():
     env = simpy.Environment()
 
-    # 두 AGV 생성: 예시) AGV0은 (8,1)에서 (0,1)로, AGV1은 (8,5)에서 (0,5)로 이동
+    # 두 AGV 생성: 예시) AGV0: (8,1)에서 (0,1)로, AGV1: (8,5)에서 (0,5)로 이동
     agv0 = AGV(0, start_pos=(8, 1), goal=(0, 1))
     agv1 = AGV(1, start_pos=(8, 5), goal=(0, 5))
     agvs = [agv0, agv1]
@@ -189,7 +224,7 @@ def run_simulation():
     collision_counter = [0]  # 충돌 이벤트 횟수
     deadlock_counter = [0]   # deadlock 이벤트 횟수
 
-    # 각 AGV 이동 프로세스 시작 (속도 변동성을 반영하여 uniform하게 이동하되 매 step마다 랜덤 변동)
+    # 각 AGV 이동 프로세스 시작 (다익스트라 경로와 속도 변동성이 반영됨)
     for agv in agvs:
         env.process(agv_process(env, agv, cell_blocked))
     # 모니터링 프로세스 시작
