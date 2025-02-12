@@ -507,7 +507,7 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5))
+                yield env.timeout(random.uniform(0.5, 1.5)) # 결과값을 유동적으로 적용 
             elif agv.cargo == 1 and current_int_cell in exit_coords:
                 available_exit = find_nearest_exit(current_int_cell, agv.id)
                 if available_exit != current_int_cell:
@@ -521,7 +521,7 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5))
+                yield env.timeout(random.uniform(0.5, 1.5)) # 이동에 대안 변동성 부여
         # end while
     # end agv_process
 
@@ -882,6 +882,7 @@ def run_server(port):
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
 def start_multi_server():
+    # 4개의 포트에 대한 값값
     ports = [5001, 5002, 5003, 5004]
     processes = []
     try:
