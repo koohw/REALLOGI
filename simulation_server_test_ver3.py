@@ -466,11 +466,11 @@ def create_app(port):
                     yield env.timeout(0.1)
                 RESERVED_CELLS[next_cell] = agv.id
 
-                # ④-3. 이동 (부드러운 STEP_SIZE 단위 이동)
+                # ④-3. 이동 (부드러운 STEP_SIZE 단위 이동) 
                 current_pos = agv.pos
                 dx = next_cell[0] - current_pos[0]
                 dy = next_cell[1] - current_pos[1]
-                distance = (dx**2 + dy**2)**0.5
+                distance = (dx**2 + dy**2)**0.5 # 가야하는 위치에 대해서 지정함.
                 num_steps = int(distance / STEP_SIZE)
                 for _ in range(num_steps):
                     current_pos = (
@@ -530,8 +530,8 @@ def create_app(port):
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
                 yield env.timeout(random.uniform(0.5, 1.5))
-        # end while
-    # end agv_process
+        # end while while문이 종료되는 시점.
+    # end agv_process agv_process가 끝나야함.
 
     def record_stats(env, sim_duration, stats):
         while env.now < sim_duration:
