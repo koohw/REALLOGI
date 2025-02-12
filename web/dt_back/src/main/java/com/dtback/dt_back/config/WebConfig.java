@@ -1,5 +1,6 @@
 package com.dtback.dt_back.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -7,6 +8,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
+    @Value("${spring.allowed.origin}")
+    private String allowedOrigin;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -23,11 +27,18 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:3000")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
+        registry
+                .addMapping("/**")
+                .allowedOrigins(allowedOrigin)
+//                .allowedMethods(HttpMethod.GET.name(), HttpMethod.POST.name(), HttpMethod.PUT.name(),
+//                        HttpMethod.DELETE.name(), HttpMethod.HEAD.name(), HttpMethod.OPTIONS.name(),
+//                        HttpMethod.PATCH.name())
+//                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD")
                 .allowCredentials(true)
-                .maxAge(3600);
+                .allowedHeaders("*")
+                .maxAge(3600)
+                .allowedMethods("*");
+
+
     }
 }
