@@ -142,3 +142,15 @@ if __name__ == "__main__":
 #     if path is None:
 #         logging.warning("경로 탐색 실패: 시작 %s, 목표 %s", start, goal)
 #     return path
+
+
+
+
+
+# def send_full_path(path):
+#     payload = {"command": "PATH", "data": {"full_path": path}}
+#     result = client.publish(TOPIC_COMMAND_TO_DEVICE, json.dumps(payload))
+#     if result[0] == 0:
+#         print(f"[서버] 전체 경로 전송 성공: {payload}")
+#     else:
+#         print(f"[서버] 전체 경로 전송 실패: {payload}")
