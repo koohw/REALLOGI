@@ -11,7 +11,7 @@ from datetime import datetime  # 실제 현실시간 사용
 
 # --------------------------------------------------
 # 로그 설정: 개발/디버깅 시 DEBUG, 운영 시 INFO 레벨로 설정
-DEBUG_MODE = True  # 개발/디버깅: True, 운영: False
+DEBUG_MODE = False  # 개발/디버깅: True, 운영: False
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
@@ -161,7 +161,7 @@ MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
 WAIT_INTERVAL = 1
 
 # 운영 모드에서는 실제 하드웨어 연동 사용을 위해 SIMULATE_MQTT는 False로 설정합니다.
-SIMULATE_MQTT = True
+SIMULATE_MQTT = False
 
 def random_start_position():
     # 시작 좌표를 항상 (8, 0)으로 반환하도록 수정
@@ -303,10 +303,13 @@ def simulation_main():
     for i in range(NUM_AGV):
         agv_positions[i] = (0, 0)
         logs[i] = []
+    # for i in range(NUM_AGV):
+    #     if i == 0 and not DEBUG_MODE:
+    #         print("[운영 모드] AGV 1 시뮬레이션 프로세스 실행 중지 (하드웨어 연동 사용)")
+    #         continue
+    #     env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
+    # env.run(until=float('inf'))
     for i in range(NUM_AGV):
-        if i == 0 and not DEBUG_MODE:
-            print("[운영 모드] AGV 1 시뮬레이션 프로세스 실행 중지 (하드웨어 연동 사용)")
-            continue
         env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
     env.run(until=float('inf'))
 
