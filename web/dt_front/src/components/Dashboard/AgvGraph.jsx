@@ -1,56 +1,132 @@
-import { Line } from 'react-chartjs-2';
+import React, { useState, useEffect } from "react";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Tooltip,
-  Legend
-} from 'chart.js';
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
+  const [agvData, setAgvData] = useState([]);
+  const [timeLabels, setTimeLabels] = useState([]);
 
-export default function AgvGraph() {
-    //임시 데이터 설정
-  const data = {
-    labels: ['15:20', '15:30', '15:40', '15:50', '16:00', '16:10', '16:20', '16:30', '16:40', '16:50'],
-    datasets: [
-      {
-        label: 'AGV 효율성',
-        data: [65, 75, 70, 80, 60, 85, 75, 90, 85, 80],
-        borderColor: 'rgb(75, 192, 192)',
-        tension: 0.1
+  useEffect(() => {
+    const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      // Get current timestamp
+      const now = new Date();
+      const timeLabel = `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes()
+      ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
+      // Calculate status counts
+      const statusCounts = {
+        operating: data.agv_number,
+        waiting: data.agvs.filter((agv) => agv.state === "STOPPED").length,
+        charging: data.agvs.filter((agv) => agv.state === "UNLOADING").length,
+        error: data.agvs.filter((agv) => agv.issue !== "").length,
+      };
+
+      // Calculate total order success
+      const orderTotal = Object.values(data.order_success).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const productCount = {
+        total: orderTotal,
+      };
+
+      // Pass data to parent components
+      if (onDataUpdate) {
+        onDataUpdate(statusCounts);
       }
-    ]
-  };
+      if (onOrderUpdate) {
+        onOrderUpdate({ productCount });
+      }
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top' }
-    },
-    scales: {
-      y: { beginAtZero: true }
-    }
-  };
+      // Calculate efficiency metrics for graph
+      const runningAgvs = data.agvs.filter(
+        (agv) => agv.state === "RUNNING"
+      ).length;
+      const totalActiveAgvs = data.agvs.filter(
+        (agv) => agv.state !== ""
+      ).length;
+      const efficiency =
+        totalActiveAgvs > 0 ? (runningAgvs / totalActiveAgvs) * 100 : 0;
+
+      // Update data (keep last 10 points)
+      setTimeLabels((prev) => {
+        const newLabels = [...prev, timeLabel];
+        return newLabels.slice(-10);
+      });
+
+      setAgvData((prev) => {
+        const newData = [
+          ...prev,
+          {
+            time: timeLabel,
+            efficiency: efficiency,
+          },
+        ];
+        return newData.slice(-10);
+      });
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:", error);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [onDataUpdate, onOrderUpdate]);
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 mb-6">
-      <h2 className="text-lg font-semibold mb-4">실시간 AGV 센서 효율성 그래프</h2>
+    <div className="w-full bg-white rounded-lg p-4">
+      <h2 className="text-lg font-semibold mb-4">실시간 AGV 효율성 그래프</h2>
       <div className="h-64">
-        <Line data={data} options={options} />
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={agvData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="time"
+              padding={{ left: 30, right: 30 }}
+              angle={-45}
+              textAnchor="end"
+              height={60}
+              interval={0}
+            />
+            <YAxis
+              domain={[0, 100]}
+              label={{
+                value: "효율성 (%)",
+                angle: -90,
+                position: "insideLeft",
+              }}
+            />
+            <Tooltip />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="efficiency"
+              name="AGV 효율성"
+              stroke="#2563eb"
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
-}
+};
+
+export default RealTimeAGVGraph;

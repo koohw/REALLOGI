@@ -30,8 +30,6 @@ function MainApp() {
 
   useEffect(() => {
     const persistedState = localStorage.getItem("persist:user");
-
-    // 로컬스토리지에 저장된 값이 존재하는 경우 JSON 파싱
     if (persistedState) {
       try {
         const parsedState = JSON.parse(persistedState);
@@ -45,13 +43,48 @@ function MainApp() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/simulation" element={<ProtectedRoute><SimulationPage /></ProtectedRoute>} />
-        <Route path="/agv-register" element={<ProtectedRoute><AgvRegisterPage /></ProtectedRoute>} />
-        <Route path="/modify-info" element={<ProtectedRoute><ModifyInfoPage /></ProtectedRoute>} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/simulation"
+          element={
+            <ProtectedRoute>
+              <SimulationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agv-register"
+          element={
+            <ProtectedRoute>
+              <AgvRegisterPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modify-info"
+          element={
+            <ProtectedRoute>
+              <ModifyInfoPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/monitor" element={<MonitorPage />} />
       </Routes>
     </BrowserRouter>

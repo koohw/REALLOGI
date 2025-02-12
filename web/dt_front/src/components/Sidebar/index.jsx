@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth'; // useAuth 훅을 가져옵니다.
-import MenuItem from './MenuItem';
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth"; // useAuth 훅을 가져옵니다.
+import MenuItem from "./MenuItem";
 
 export default function Sidebar() {
   const { logout } = useAuth(); // useAuth 훅에서 logout 함수 가져오기
@@ -16,13 +16,13 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     await logout(); // 로그아웃 처리
-    navigate('/login'); // 로그인 페이지로 리디렉션
+    navigate("/login"); // 로그인 페이지로 리디렉션
   };
 
   return (
     <div className="w-64 min-h-screen bg-white shadow-lg">
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-8">물류 관리 시스템</h1>
+        <h1 className="text-2xl font-bold mb-8">RealLogi</h1>
         <nav className="space-y-4">
           {menuItems.map((item, index) => (
             <MenuItem key={index} {...item} />
