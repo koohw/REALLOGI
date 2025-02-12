@@ -1,6 +1,7 @@
 import simpy
-from collections import deque, defaultdict
 import math
+import random
+from collections import deque, defaultdict
 
 # ------------------------------
 # 테스트용 그리드 및 상수 설정
@@ -18,31 +19,32 @@ MAP = [
 ]
 ROWS = len(MAP)
 COLS = len(MAP[0])
-STEP_SIZE = 0.1  # 한 칸 이동에 걸리는 시간
 
-# 안전거리 (충돌로 판단하는 최소 거리)
+# 시뮬레이션 시간 step (보간시 시간 간격)
+TIME_STEP = 0.1  
+# 기본 AGV의 이동 속도 (셀/시간 단위)
+BASE_SPEED = 0.5  
+# 속도 변동성: 실제 속도는 BASE_SPEED * factor, factor는 [0.8, 1.2] 범위 (예시)
+SPEED_VARIABILITY = (0.8, 1.2)
+# AGV들이 서로 충돌했다고 판단하는 최소 거리 (cell 단위)
 SAFETY_MARGIN = 0.5
 
 # ------------------------------
-# 헬퍼 함수
+# BFS 경로 탐색 함수 (변경 없음)
 # ------------------------------
-def bfs_path(start, goal, current_time, cell_blocked, congestion_count, avoid_corridor=False):
-    """
-    단순 BFS를 사용하여 start에서 goal까지의 경로(정수 셀 좌표 리스트)를 찾는다.
-    """
+def bfs_path(start, goal, current_time, cell_blocked, congestion_count):
     if start == goal:
         return [start]
     visited = {start: None}
     queue = deque([start])
     while queue:
         r, c = queue.popleft()
-        for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
             if not (0 <= nr < ROWS and 0 <= nc < COLS):
                 continue
             if MAP[nr][nc] == 1:
                 continue
-            # avoid_corridor 옵션은 여기서는 사용하지 않음.
             if (nr, nc) in cell_blocked and cell_blocked[(nr, nc)] > current_time:
                 congestion_count[(nr, nc)] += 1
                 continue
@@ -66,63 +68,85 @@ def bfs_path(start, goal, current_time, cell_blocked, congestion_count, avoid_co
 class AGV:
     def __init__(self, agv_id, start_pos, goal):
         self.id = agv_id
-        # pos를 float형 좌표로 관리. (시뮬레이션에서는 각 셀의 중심 좌표를 사용)
+        # 현재 위치: 실수 좌표 (셀 중심)
         self.pos = (float(start_pos[0]), float(start_pos[1]))
-        self.goal = goal  # 목표 셀 (정수 좌표)
-        self.path = []   # 경로: 목표까지의 정수 좌표 목록
-        self.last_moved_time = 0  # 마지막으로 위치가 바뀐 시각
+        self.goal = goal            # 목표 셀 (정수 좌표)
+        self.path = []              # 경로 (BFS 결과: 정수 좌표 리스트)
+        self.last_moved_time = 0    # 마지막 이동 시각
 
 # ------------------------------
-# AGV 이동 프로세스
+# AGV 이동 프로세스 (속도 변동성을 부여)
 # ------------------------------
 def agv_process(env, agv, cell_blocked):
     """
-    AGV가 BFS 경로를 계산하여 목표까지 한 칸씩 이동하는 프로세스.
-    각 이동 후에 STEP_SIZE만큼 시간 지연하며, 이동 시마다 마지막 이동 시간을 업데이트.
+    AGV가 BFS 경로를 계산한 후, 경로 상의 각 셀 사이를 이동합니다.
+    단, 각 TIME_STEP마다 실제 이동 속도는 BASE_SPEED에 일정한 변동성을 가진 랜덤 계수를 곱한 값으로 결정됩니다.
     """
     congestion = defaultdict(int)
     current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
-    agv.path = bfs_path(current_cell, agv.goal, env.now, cell_blocked, congestion)
+    # 초기 경로 계산
+    agv.path = bfs_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
     agv.last_moved_time = env.now
 
     while agv.path and env.now < 1000:
-        # 경로의 첫 셀은 현재 위치이므로, 다음 셀로 이동
-        if len(agv.path) > 1:
-            next_cell = agv.path[1]
-        else:
-            break  # 도착
+        # 경로가 1칸 이하면 종료 (목표 도달)
+        if len(agv.path) <= 1:
+            break
+
+        # 다음 셀 선택: 경로의 두 번째 원소
+        next_cell = agv.path[1]
+
+        # 현재 셀과 다음 셀의 중심 좌표 (실수형)
+        current_center = (float(agv.pos[0]), float(agv.pos[1]))
+        next_center = (float(next_cell[0]), float(next_cell[1]))
+        dx = next_center[0] - current_center[0]
+        dy = next_center[1] - current_center[1]
+        distance = math.sqrt(dx*dx + dy*dy)
         
-        # 한 셀 이동 (여기서는 단순히 시간 STEP_SIZE 후에 바로 위치 업데이트)
-        yield env.timeout(STEP_SIZE)
-        agv.pos = (float(next_cell[0]), float(next_cell[1]))
+        # 매 step마다 속도 변동성을 부여하여 실제 속도 결정
+        # effective_speed = BASE_SPEED * random_factor (random_factor ∈ [SPEED_VARIABILITY[0], SPEED_VARIABILITY[1]])
+        effective_speed = BASE_SPEED * random.uniform(*SPEED_VARIABILITY)
+        interp_distance = effective_speed * TIME_STEP
+        num_steps = max(1, int(distance / interp_distance))
+        step_dx = dx / num_steps
+        step_dy = dy / num_steps
+
+        # 보간 이동: 매 TIME_STEP마다 이동
+        for _ in range(num_steps):
+            yield env.timeout(TIME_STEP)
+            # 매 step마다 속도 변동성을 다시 적용할 수도 있지만 여기서는 각 세그먼트에 대해 한 번의 effective_speed로 진행
+            new_x = agv.pos[0] + step_dx
+            new_y = agv.pos[1] + step_dy
+            agv.pos = (new_x, new_y)
+            agv.last_moved_time = env.now
+
+        # 보간 후 정확히 다음 셀 중심으로 보정
+        agv.pos = (next_center[0], next_center[1])
         agv.last_moved_time = env.now
-        # 경로에서 현재 셀 제거
+        # 도착한 셀은 경로에서 제거
         agv.path.pop(0)
         current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
         if current_cell != agv.goal:
+            # 남은 경로 재계산 (BFS)
             agv.path = bfs_path(current_cell, agv.goal, env.now, cell_blocked, defaultdict(int))
         else:
-            break  # 도착
+            break
 
 # ------------------------------
-# 모니터링 프로세스 (충돌, 교착 감지)
+# 모니터링 프로세스 (충돌 및 deadlock 감지)
 # ------------------------------
 def monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_time_threshold=5):
     """
-    0.1 시간 단위로 각 AGV의 위치를 검사하여:
-      - 두 AGV 사이의 거리가 SAFETY_MARGIN 미만이면(교차하면) collision 이벤트로 간주.
-      - 각 AGV가 deadlock_time_threshold 시간 이상 위치 변화가 없으면 deadlock 이벤트로 간주.
-    
-    단, 한 번의 충돌/교착 이벤트가 지속될 경우 연속해서 카운트되지 않도록
-    (즉, 상태 변화가 있을 때만 카운트) 합니다.
+    0.1 시간 간격으로 각 AGV의 위치를 검사하여,
+      - 두 AGV 간의 거리가 SAFETY_MARGIN 미만이면 충돌 이벤트로 감지
+      - 각 AGV가 마지막 이동 이후 deadlock_time_threshold 시간 이상 움직이지 않으면 deadlock 이벤트로 감지
+    연속 이벤트는 한 번만 카운트합니다.
     """
-    # collision_state: 이전 시간에 충돌이 있었는지 여부 (전체 AGV 쌍)
     collision_state = False
-    # 각 AGV별로 deadlock 상태를 추적하는 딕셔너리
     deadlock_state = {agv.id: False for agv in agvs}
 
     while env.now < 1000:
-        # --- 충돌 감지 ---
+        # 충돌 감지
         collision_detected = False
         for i in range(len(agvs)):
             for j in range(i+1, len(agvs)):
@@ -140,7 +164,7 @@ def monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_tim
         elif not collision_detected:
             collision_state = False
 
-        # --- 교착(Deadlock) 감지 ---
+        # 교착(Deadlock) 감지
         for agv in agvs:
             if env.now - agv.last_moved_time > deadlock_time_threshold and not deadlock_state[agv.id]:
                 deadlock_counter[0] += 1
@@ -154,27 +178,20 @@ def monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_tim
 # 메인 시뮬레이션 함수
 # ------------------------------
 def run_simulation():
-    # 시뮬레이션 환경 생성
     env = simpy.Environment()
 
-    # 두 대의 AGV를 생성합니다.
-    # 예를 들어, AGV0는 아래쪽에서 위쪽으로, AGV1은 오른쪽 아래에서 위쪽 오른쪽으로 이동하도록 설정
-    # (두 경로가 교차하는 상황을 테스트합니다)
+    # 두 AGV 생성: 예시) AGV0은 (8,1)에서 (0,1)로, AGV1은 (8,5)에서 (0,5)로 이동
     agv0 = AGV(0, start_pos=(8, 1), goal=(0, 1))
     agv1 = AGV(1, start_pos=(8, 5), goal=(0, 5))
     agvs = [agv0, agv1]
 
-    # cell_blocked는 여기서는 사용하지 않으므로 빈 dict 사용
-    cell_blocked = {}
+    cell_blocked = {}  # 테스트에서는 사용하지 않음
+    collision_counter = [0]  # 충돌 이벤트 횟수
+    deadlock_counter = [0]   # deadlock 이벤트 횟수
 
-    # 충돌 및 교착(Deadlock) 이벤트 카운터 (리스트의 첫 원소에 카운트를 저장)
-    collision_counter = [0]
-    deadlock_counter = [0]
-
-    # 각 AGV의 프로세스 시작
+    # 각 AGV 이동 프로세스 시작 (속도 변동성을 반영하여 uniform하게 이동하되 매 step마다 랜덤 변동)
     for agv in agvs:
         env.process(agv_process(env, agv, cell_blocked))
-    
     # 모니터링 프로세스 시작
     env.process(monitor_process(env, agvs, collision_counter, deadlock_counter, deadlock_time_threshold=5))
 
