@@ -154,3 +154,19 @@ if __name__ == "__main__":
 #         print(f"[서버] 전체 경로 전송 성공: {payload}")
 #     else:
 #         print(f"[서버] 전체 경로 전송 실패: {payload}")
+
+
+
+
+# def on_message(client, userdata, msg):
+#     try:
+#         message = json.loads(msg.payload.decode())
+#         if message.get("blocked", False):
+#             current_location = tuple(message.get("location"))
+#             # 예를 들어, 목표가 이전에 설정된 목적지라면:
+#             new_path = calculate_full_path(current_location, target_location)
+#             if new_path:
+#                 send_full_path(new_path)
+#         # 그 외 ACK나 상태 업데이트 처리...
+#     except Exception as e:
+#         print(f"[서버] 메시지 처리 오류: {e}")
