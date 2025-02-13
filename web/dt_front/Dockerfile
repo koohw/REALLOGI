@@ -6,6 +6,7 @@ RUN yarn install
 COPY . .
 RUN yarn build
 
+
 # Stage 2: 실행 단계
 FROM node:20-alpine
 RUN yarn global add serve
