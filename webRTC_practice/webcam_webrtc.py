@@ -12,7 +12,7 @@ from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-SIGNALING_SERVER = 'ws://127.0.0.1:5000/ws'
+SIGNALING_SERVER = 'ws://127.0.0.1:6033/ws'
 
 
 class VideoCamera(VideoStreamTrack):

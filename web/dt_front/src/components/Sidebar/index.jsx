@@ -22,7 +22,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 min-h-screen bg-white shadow-lg">
       <div className="p-6">
-        <h1 className="text-2xl font-bold mb-8">RealLogi</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">RealLogi</h1>
         <nav className="space-y-4">
           {menuItems.map((item, index) => (
             <MenuItem key={index} {...item} />
@@ -30,10 +30,10 @@ export default function Sidebar() {
         </nav>
 
         {/* 로그아웃 버튼 추가 */}
-        <div className="mt-8">
+        <div className="mt-8 ml-4">
           <button
             onClick={handleLogout}
-            className="w-full p-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="w-1/2 p-4 bg-gray-300 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             로그아웃
           </button>
