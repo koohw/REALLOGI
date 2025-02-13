@@ -8,7 +8,7 @@ from datetime import datetime
 # simulation.py에서 공유 데이터, 락, simulation_main 함수를 import합니다.
 from simulation import shared_data, data_lock, simulation_main
 # agv_client.py에서 MQTT 실행 함수를 import합니다.
-from agv_client import run_server_mqtt
+# from agv_client import run_server_mqtt
 
 app = Flask(__name__)
 CORS(app)
