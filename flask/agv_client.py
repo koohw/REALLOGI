@@ -138,17 +138,23 @@
 import paho.mqtt.client as mqtt
 import json
 import time
-from simulation import map_data, ROWS, COLS, bfs_path, DEBUG_MODE  # simulation.py와 동일 디렉토리에 있어야 함
+
+# (중요) BFS와 지도 정보를 simulation.py 대신 common.py에서 가져온다고 가정.
+# common.py는 map_data, ROWS, COLS, bfs_path, shelf_coords, exit_coords 등 정의
+from common import map_data, ROWS, COLS, bfs_path
+
+# 필요 시 별도의 DEBUG_MODE를 사용할 수도 있음.
+DEBUG_MODE = False
 
 # MQTT 브로커 및 토픽 설정
 BROKER = "broker.hivemq.com"
 PORT = 1883
-TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 하드웨어가 상태/ACK 메시지를 송신하는 토픽
-TOPIC_COMMAND_TO_DEVICE = "simpy/commands"    # 서버가 하드웨어로 명령을 송신하는 토픽
+TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 하드웨어(잿슨오린나노) -> 서버
+TOPIC_COMMAND_TO_DEVICE = "simpy/commands"   # 서버 -> 하드웨어
 
 # 초기 위치
 current_location = (8, 0)
-# 테스트 모드에서는 도착 상태를 (0,0)으로, 운영 모드에서는 도착지점 없이 계속 움직임
+# 테스트 모드에서는 (0,0)으로 하되, 실제 운영 모드에서는 None (경로 없이 계속 움직일 수 있음)
 if DEBUG_MODE:
     target_location = (0, 0)
 else:
@@ -165,7 +171,7 @@ client = mqtt.Client(client_id="server_client", protocol=mqtt.MQTTv311)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print(f"[서버] MQTT 브로커와 연결 성공 (rc={rc}).")
+        print(f"[서버] MQTT 브로커 연결 성공 (rc={rc})")
         print("[서버] 하드웨어와의 통신 대기중...")
         client.subscribe(TOPIC_STATUS_FROM_DEVICE)
     else:
@@ -178,25 +184,36 @@ def on_message(client, userdata, msg):
         current_time = time.time()
         if current_time - last_print_time >= PRINT_INTERVAL:
             if message.get("ack") is True:
+                # 첫 ACK 수신 시 '하드웨어 연결 성공' 메시지
                 if not comm_success:
                     print("[서버] 하드웨어 연결 성공")
                 comm_success = True
+
+                # 위치 업데이트
                 new_location = tuple(message.get("location", current_location))
                 current_location = new_location
-                print(f"[서버] 하드웨어와 통신 성공: 이동 완료(ACK) 수신, 현재 위치: {new_location}")
+                print(f"[서버] 이동 완료(ACK) 수신, 현재 위치: {new_location}")
+
+                # 다음 명령 전송(기본 구조 유지)
                 send_next_command()
+
                 if mqtt_callback is not None:
                     state = message.get("state", "moving")
                     mqtt_callback(1, new_location, state)
+
             elif message.get("blocked", False):
+                # 장애 발생 -> 재경로 요청
                 print(f"[서버] 경로 장애 발생: 현재 위치 {message.get('location')}, 재경로 요청")
                 current_location = tuple(message.get("location", current_location))
                 send_next_command()
+
             else:
                 status_state = message.get("state", "unknown")
                 location = message.get("location", current_location)
                 print(f"[서버] 상태 메시지 수신 - 위치: {location}, 상태: {status_state}")
+
             last_print_time = current_time
+
     except Exception as e:
         print(f"[서버] 메시지 처리 오류: {e}")
 
@@ -218,15 +235,31 @@ def send_command(command, data=None):
         print(f"[서버] 명령 전송 실패: {payload}")
 
 def calculate_full_path(start, goal, obstacles=set()):
+    """공통 BFS 로직 사용 (common.py에서 import)."""
     path = bfs_path(map_data, start, goal, obstacles)
     return path
 
 def send_next_command():
+    """
+    현재 위치(current_location)에서 target_location까지 BFS 후 PATH 전송.
+    운영 모드에선 target이 None일 수 있어, 그 경우 로직을 확장해야 함.
+    """
     global current_location, target_location, last_sent_command
+
+    # target_location이 None이면, 운영 모드에서는 계속 움직이거나
+    # 혹은 미리 지정된 목적지가 없음을 의미 -> 로직 확장 필요
+    if target_location is None:
+        # 예: 임의로 (0,0)으로 가도록 하거나,
+        # 다른 로직으로 다음 위치를 결정
+        # 여기서는 단순히 return으로 예시
+        print("[서버] target_location이 None입니다. 경로를 전송하지 않습니다.")
+        return
+
     full_path = calculate_full_path(current_location, target_location)
     if full_path is None:
         print("[서버] 경로 계산 실패")
         return
+
     # 이전에 전송한 전체 경로와 다를 때만 전송
     if last_sent_command != tuple(full_path):
         send_command("PATH", {"full_path": full_path})
@@ -235,10 +268,14 @@ def send_next_command():
         print("[서버] 동일한 경로 명령은 전송하지 않음.")
 
 def run_server_mqtt(callback=None):
+    """메인 구동 함수. callback은 위치/상태 변동 시 외부 호출 용."""
     global mqtt_callback
     mqtt_callback = callback
+
     try:
+        # 초기 한번 경로 전송
         send_next_command()
+        # 이후 무한 대기, 콜백 처리
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
@@ -249,3 +286,4 @@ def run_server_mqtt(callback=None):
 
 if __name__ == "__main__":
     run_server_mqtt()
+
