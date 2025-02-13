@@ -34,9 +34,6 @@ UPDATE_INTERVAL = 0.1
 SIM_FINISHED = False
 SIM_APP_RUNNING = False
 
-# 새로 추가된 전역 변수: 시뮬레이션 종료 요청 플래그
-SIM_TERMINATE = False
-
 current_time_paused = None
 delivered_count_paused = None
 current_positions = []
@@ -104,9 +101,6 @@ def create_app(port):
         visited = {start: None}
         queue = deque([start])
         while queue:
-            # 종료 요청 체크
-            if SIM_TERMINATE:
-                return None
             r, c = queue.popleft()
             for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 nr, nc = r + dr, c + dc
@@ -167,7 +161,7 @@ def create_app(port):
             return min(available, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
         else:
             return min(exit_coords, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
-    
+
     def find_nearest_shelf(pos, current_agv_id=None):
         available = []
         for sh in shelf_coords:
@@ -283,58 +277,42 @@ def create_app(port):
             SIM_DURATION = current_time + 3000
             print(f"[extend_sim_duration_if_needed] SIM_DURATION extended to {SIM_DURATION}")
 
-    def restart_simulation_with_current_state():
-        global SIM_RUNNING, SIM_ENV, SIM_STATS, SIM_AGVS, SIM_DURATION, global_speed_factor
-        if not SIM_RUNNING:
-            return
-        current_time = SIM_ENV.now
-        extend_sim_duration_if_needed(current_time)
-        current_positions = []
-        current_cargos = []
-        current_paths = []
-        for agv in SIM_AGVS:
-            current_positions.append(agv.pos)
-            current_cargos.append(agv.cargo)
-            current_paths.append(agv.path.copy() if agv.path else [])
-        delivered_count = SIM_STATS.delivered_count
-        SIM_RUNNING = False
-        env = RealtimeEnvironment(factor=global_speed_factor, initial_time=current_time)
-        stats = Stats()
-        stats.delivered_count = delivered_count
-        agvs = []
+    # run_one_simulation: 단일 실험을 실행하고 compute_simulation_result 결과를 반환
+    def run_one_simulation(agv_count, sim_duration):
+        env = RealtimeEnvironment(factor=1)
         cell_blocked = {}
-        for i, (pos, cargo, path) in enumerate(zip(current_positions, current_cargos, current_paths)):
+        stats = Stats()
+        agvs = []
+        start_row = 8
+        start_cols = [0, 2, 4, 6, 1, 3, 5]
+        for i in range(agv_count):
+            pos = (start_row, start_cols[i % len(start_cols)])
             agv = AGV(i, pos)
-            agv.cargo = cargo
-            agv.path = path
             agvs.append(agv)
-            env.process(agv_process(agv, env, stats, SIM_DURATION, cell_blocked))
-        env.process(record_stats(env, SIM_DURATION, stats))
-        env.process(record_interval_stats(env, SIM_DURATION, stats))
-        SIM_ENV = env
-        SIM_STATS = stats
-        SIM_AGVS = agvs
-        socketio.start_background_task(run_continued_simulation, env, SIM_DURATION, len(agvs))
+        for agv in agvs:
+            env.process(agv_process(agv, env, stats, sim_duration, cell_blocked))
+        env.process(record_stats(env, sim_duration, stats))
+        env.process(record_interval_stats(env, sim_duration, stats))
+        env.run(until=sim_duration)
+        return compute_simulation_result(stats, sim_duration, agv_count)
 
-    def run_continued_simulation(env, sim_duration, agv_count):
-        global SIM_RUNNING, SIM_FINISHED
-        SIM_RUNNING = True
-        SIM_FINISHED = False
-        try:
-            env.run(until=sim_duration)
-        except Exception as e:
-            print(f"Simulation error: {e}")
-        finally:
-            SIM_RUNNING = False
-            SIM_FINISHED = True
-            print("시뮬레이션 종료")
-            result = compute_simulation_result(SIM_STATS, sim_duration, agv_count)
-            socketio.emit('simulation_final', result)
+    # run_multiple_simulations: REPEAT_RUNS회 실험 후 각 지표의 평균값을 계산
+    def run_multiple_simulations(agv_count, sim_duration, repeat_runs=REPEAT_RUNS):
+        results = []
+        for i in range(repeat_runs):
+            result = run_one_simulation(agv_count, sim_duration)
+            results.append(result)
+        avg_result = {}
+        avg_result["agv_count"] = agv_count
+        avg_result["throughput_per_hour"] = statistics.mean([r["throughput_per_hour"] for r in results]) if results else 0
+        avg_result["delivered_per_agv"] = statistics.mean([r["delivered_per_agv"] for r in results]) if results else 0
+        avg_result["avg_cycle"] = statistics.mean([r["avg_cycle"] for r in results]) if results else 0
+        avg_result["avg_wait"] = statistics.mean([r["avg_wait"] for r in results]) if results else 0
+        avg_result["avg_travel"] = statistics.mean([r["avg_travel"] for r in results]) if results else 0
+        return avg_result
 
     def agv_process(agv, env, stats, sim_duration, cell_blocked):
         while env.now < sim_duration:
-            if SIM_TERMINATE:
-                break
             # ① 현재 셀에 낮은 id를 가진 AGV가 있으면 대기
             current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
             conflict_found = False
@@ -396,14 +374,12 @@ def create_app(port):
                         yield env.timeout(0.1)
                         continue
 
-                # ★ 수정된 부분: 수직 통로에서 반대 방향 진행 시 후진 처리 (오직 둘 다 통로 내에 있을 때만)
                 cur_dir = (next_cell[0] - current_cell[0], next_cell[1] - current_cell[1])
                 if abs(cur_dir[0]) > 0 and abs(cur_dir[1]) < 1e-6:  # 수직 이동인 경우
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
                         other_cell = (int(round(other.pos[0])), int(round(other.pos[1])))
-                        # 오직 두 AGV 모두 통로 내에 있을 때만 후진 시도
                         if is_in_corridor(current_cell) and is_in_corridor(other_cell):
                             if other.path and len(other.path) > 1:
                                 other_dir = (other.path[1][0] - other_cell[0], other.path[1][1] - other_cell[1])
@@ -414,18 +390,13 @@ def create_app(port):
                                 if 0 <= reverse_cell[0] < ROWS and 0 <= reverse_cell[1] < COLS and MAP[reverse_cell[0]][reverse_cell[1]] != 1:
                                     occupied = any((int(round(o.pos[0])), int(round(o.pos[1]))) == reverse_cell for o in SIM_AGVS)
                                     if not occupied and reverse_cell not in RESERVED_CELLS:
-                                        # 후진 경로: 현재 셀 -> reverse_cell -> 현재 셀 (대기)
                                         agv.path = [current_cell, reverse_cell, current_cell] + agv.path[1:]
                                         next_cell = agv.path[1]
                                         break
-                    # (else 분기는 제거)
 
-                # ④-1. 다음 셀 예약 및 충돌 회피 (낮은 id 우선 및 스왑 충돌 체크)
                 wait_count = 0
-                max_wait = 50  # 0.1초씩 약 5초 대기
+                max_wait = 50
                 while True:
-                    if SIM_TERMINATE:
-                        break
                     collision = False
                     for other in SIM_AGVS:
                         if other.id == agv.id:
@@ -463,20 +434,16 @@ def create_app(port):
                     else:
                         break
 
-                # ④-2. 예약 처리: 만약 다음 셀이 이미 다른 AGV에 의해 예약되어 있으면 대기
                 while next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] != agv.id:
                     yield env.timeout(0.1)
                 RESERVED_CELLS[next_cell] = agv.id
 
-                # ④-3. 이동 (부드러운 STEP_SIZE 단위 이동)
                 current_pos = agv.pos
                 dx = next_cell[0] - current_pos[0]
                 dy = next_cell[1] - current_pos[1]
                 distance = (dx**2 + dy**2)**0.5
                 num_steps = int(distance / STEP_SIZE)
                 for _ in range(num_steps):
-                    if SIM_TERMINATE:
-                        break
                     current_pos = (
                         current_pos[0] + STEP_SIZE * dx / distance,
                         current_pos[1] + STEP_SIZE * dy / distance
@@ -495,7 +462,6 @@ def create_app(port):
                     agv.pos = current_pos
                     rounded_pos = (round(current_pos[0], 1), round(current_pos[1], 1))
                     stats.agv_stats[agv.id]["location_log"].append((env.now, rounded_pos))
-                # 이동 완료: 도착 처리 및 예약 해제
                 agv.pos = (float(next_cell[0]), float(next_cell[1]))
                 agv.arrival_time = env.now
                 if next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] == agv.id:
@@ -504,7 +470,6 @@ def create_app(port):
             else:
                 yield env.timeout(0.1)
 
-            # ⑤ 적재/하역 조건 처리 (실시간 대체 가능 장소 체크)
             current_int_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
             if agv.cargo == 0 and current_int_cell in shelf_coords:
                 available_shelf = find_nearest_shelf(current_int_cell, agv.id)
@@ -519,7 +484,7 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5)) # 결과값을 유동적으로 적용 
+                yield env.timeout(random.uniform(0.5, 1.5))
             elif agv.cargo == 1 and current_int_cell in exit_coords:
                 available_exit = find_nearest_exit(current_int_cell, agv.id)
                 if available_exit != current_int_cell:
@@ -533,22 +498,17 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5)) # 이동에 대안 변동성 부여
+                yield env.timeout(random.uniform(0.5, 1.5))
         # end while
-    # end agv_process
 
     def record_stats(env, sim_duration, stats):
         while env.now < sim_duration:
-            if SIM_TERMINATE:
-                break
             stats.delivered_record[int(env.now)] = stats.delivered_count
             yield env.timeout(1)
 
     def record_interval_stats(env, sim_duration, stats):
         t = CHECK_INTERVAL
         while t <= sim_duration:
-            if SIM_TERMINATE:
-                break
             yield env.timeout(CHECK_INTERVAL)
             stats.delivered_history[t] = stats.delivered_count
             t += CHECK_INTERVAL
@@ -582,14 +542,23 @@ def create_app(port):
                 "travel_times": data["travel_times"],
                 "location_log": data["location_log"]
             }
-        result = {
-            "end_time": sim_duration,
-            "delivered_count": stats.delivered_count,
-            "delivered_history": stats.delivered_history,
-            "delivered_record": dict(stats.delivered_record),
-            "agv_stats": final_agv_stats
-        }
+        result = compute_simulation_result(stats, sim_duration, agv_count)
         return result
+
+    # 새로 추가된 함수: 15회 실험 후 평균 결과 계산
+    def run_multiple_sim(agv_count, sim_duration, repeat_runs=REPEAT_RUNS):
+        results = []
+        for i in range(repeat_runs):
+            result = run_one_sim(agv_count, sim_duration)
+            results.append(result)
+        avg_result = {}
+        avg_result["agv_count"] = agv_count
+        avg_result["throughput_per_hour"] = statistics.mean([r["throughput_per_hour"] for r in results]) if results else 0
+        avg_result["delivered_per_agv"] = statistics.mean([r["delivered_per_agv"] for r in results]) if results else 0
+        avg_result["avg_cycle"] = statistics.mean([r["avg_cycle"] for r in results]) if results else 0
+        avg_result["avg_wait"] = statistics.mean([r["avg_wait"] for r in results]) if results else 0
+        avg_result["avg_travel"] = statistics.mean([r["avg_travel"] for r in results]) if results else 0
+        return avg_result
 
     SIM_APP_RUNNING = False
     def run_simulation_task(agv_count, sim_duration):
@@ -669,10 +638,10 @@ def create_app(port):
 
     @socketio.on('message')
     def handle_message(message):
-        global SIM_PAUSED, SIM_RUNNING, is_paused
+        global SIM_PAUSED, SIM_RUNNING, is_paused, global_speed_factor
         try:
             data = json.loads(message) if isinstance(message, str) else message
-            logger.info(f'Received message: {data}')
+            logger.info(f"Received message: {data}")
             if 'command' in data:
                 command = data['command']
                 if command == 'start':
@@ -680,7 +649,6 @@ def create_app(port):
                         is_paused = False
                         resume_simulation()
                         return
-                    global global_speed_factor
                     agv_count = int(data.get('agv_count', 3))
                     duration = int(data.get('duration', 3000))
                     speed_str = data.get('speed', "1")
@@ -708,7 +676,8 @@ def create_app(port):
                     else:
                         global_speed_factor = float(speed_str)
                         if global_speed_factor <= 0:
-                            socketio.emit('message', {'error': 'speed must be positive or "max"'})
+                            pause_simulation()
+                            is_paused = True
                             return
                     if SIM_RUNNING:
                         socketio.emit('message', {'error': 'Simulation is already running'})
@@ -720,8 +689,11 @@ def create_app(port):
                     if new_speed <= 0:
                         socketio.emit('message', {'error': 'speed must be positive'})
                         return
-                    # 아래의 update_speed 핸들러에서 처리하도록 함
-                    socketio.emit('update_speed', {'speed': new_speed})
+                    global_speed_factor = 1.0 / new_speed
+                    # 기존 시뮬레이션은 새로 켜기 전에 단순히 정지시키도록 함
+                    pause_simulation()
+                    emit('status', {'message': f'Speed updated to {new_speed} and simulation stopped.'})
+                    print(f"[update_speed] Simulation stopped due to speed update: {new_speed}")
                 except Exception as e:
                     socketio.emit('message', {'error': str(e)})
             if 'agv_count' in data:
@@ -735,7 +707,7 @@ def create_app(port):
             if data.get('type') == 'ping':
                 socketio.emit('message', {'type': 'pong', 'timestamp': time.time()})
         except Exception as e:
-            logger.error(f'Error processing message: {str(e)}')
+            logger.error(f"Error processing message: {str(e)}")
             socketio.emit('message', {'error': str(e)})
 
     @socketio.on('simulate_stream')
@@ -768,6 +740,7 @@ def create_app(port):
             agv_count = int(data.get('agv_count', 3))
             duration = int(data.get('duration', 3000))
             initial_speed_str = data.get('initial_speed', "1")
+            # output_mode은 그대로 사용 (final 형식)
             output_mode = data.get('output', "final")
             if initial_speed_str == "max":
                 global_speed_factor = 1.0
@@ -776,84 +749,11 @@ def create_app(port):
                 if global_speed_factor <= 0:
                     emit('error', {'message': 'speed must be positive or "max"'})
                     return
-            result = run_one_sim(agv_count, duration, output_mode=output_mode)
-            if output_mode == "final":
-                for agv in result["agv_stats"].values():
-                    agv["location_log"] = []
+            # 15회 실험 후 평균값 계산하여 결과 전송
+            result = run_multiple_sim(agv_count, duration, repeat_runs=REPEAT_RUNS)
             emit('simulation_final', result)
         except Exception as e:
             emit('error', {'message': str(e)})
-
-    @socketio.on('update_speed')
-    def handle_update_speed(data):
-        global global_speed_factor, SIM_RUNNING, SIM_TERMINATE, SIM_FINISHED, current_time_paused
-        try:
-            new_speed = float(data.get('speed'))
-            if new_speed <= 0:
-                emit('error', {'message': 'speed must be positive'})
-                return
-
-            # 현재 시뮬레이션이 실행 중이면 상태 저장 후 안전하게 종료 요청
-            if SIM_RUNNING:
-                pause_simulation()  # 현재 상태 저장
-                SIM_TERMINATE = True
-                # 시뮬레이션 태스크가 모두 종료될 때까지 대기
-                while not SIM_FINISHED:
-                    eventlet.sleep(0.1)
-                SIM_TERMINATE = False  # 종료 플래그 초기화
-
-            # 새 속도 반영 (RealtimEnvironment의 factor는 1/speed로 설정)
-            global_speed_factor = 1.0 / new_speed
-
-            # 저장된 상태가 있다면 새 속도로 재시작
-            if current_time_paused is not None:
-                resume_simulation()
-
-            emit('status', {'message': f'Speed updated to {new_speed}'})
-            print(f"[update_speed] Global speed factor updated to: {global_speed_factor}")
-        except Exception as e:
-            emit('error', {'message': str(e)})
-
-    @app.route('/health')
-    def health_check():
-        return jsonify({"status": "ok"})
-
-    def pause_simulation():
-        global SIM_RUNNING, SIM_ENV, SIM_STATS, SIM_AGVS, SIM_DURATION, global_speed_factor, delivered_count_paused, current_time_paused, current_positions, current_cargos, current_paths
-        if not SIM_RUNNING:
-            return
-        current_time_paused = SIM_ENV.now
-        current_positions = []
-        current_cargos = []
-        current_paths = []
-        for agv in SIM_AGVS:
-            current_positions.append(agv.pos)
-            current_cargos.append(agv.cargo)
-            current_paths.append(agv.path.copy() if agv.path else [])
-        delivered_count_paused = SIM_STATS.delivered_count
-        SIM_RUNNING = False
-
-    def resume_simulation():
-        global SIM_RUNNING, SIM_ENV, SIM_STATS, SIM_AGVS, SIM_DURATION, global_speed_factor, delivered_count_paused, current_time_paused
-        env = RealtimeEnvironment(factor=global_speed_factor, initial_time=current_time_paused)
-        stats = Stats()
-        stats.delivered_count = delivered_count_paused
-        agvs = []
-        cell_blocked = {}
-        for i, (pos, cargo, path) in enumerate(zip(current_positions, current_cargos, current_paths)):
-            agv = AGV(i, pos)
-            agv.cargo = cargo
-            agv.path = path
-            agvs.append(agv)
-            env.process(agv_process(agv, env, stats, SIM_DURATION, cell_blocked))
-        env.process(record_stats(env, SIM_DURATION, stats))
-        env.process(record_interval_stats(env, SIM_DURATION, stats))
-        if env.now >= SIM_DURATION - 1:
-            SIM_DURATION = env.now + 3000
-        SIM_ENV = env
-        SIM_STATS = stats
-        SIM_AGVS = agvs
-        socketio.start_background_task(run_continued_simulation, env, SIM_DURATION, len(agvs))
 
     @socketio.on('pause_simulation')
     def handle_pause():
@@ -912,7 +812,6 @@ def run_server(port):
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
 def start_multi_server():
-    # 4개의 포트에 대한 값값
     ports = [5001, 5002, 5003, 5004]
     processes = []
     try:
