@@ -2,9 +2,9 @@ spring:
   application:
     name: dt_back
   datasource:
-    url: ${AWSDB_URL}
-    username: ${AWSDB_USERNAME}
-    password: ${AWSDB_PASSWORD}
+    url: ${AWSDB_URL:jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL}
+    username: ${AWSDB_USERNAME:sa}
+    password: ${AWSDB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     properties:
@@ -14,7 +14,7 @@ spring:
     show-sql: true
 
   allowed:
-    origin: ${AllowedOrigin}
+    origin: ${AllowedOrigin:http://localhost}
 
 logging:
   level:
