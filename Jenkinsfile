@@ -5,11 +5,11 @@ pipeline {
         stage('Build Backend (Spring Boot)') {
             steps {
                 dir('web/dt_back') {
-                    // Gradle 빌드를 실행하여 jar 파일을 생성합니다.
+                    // gradlew 파일에 실행 권한 추가
+                    sh 'chmod +x gradlew'
+                    // gradle 빌드 실행 (이후 build/libs 폴더에 jar 파일 생성되어야 합니다)
                     sh './gradlew clean build'
-                    // 빌드 산출물이 존재하는지 확인
-                    sh 'ls -la build/libs'
-                    // Dockerfile이 위치한 동일 디렉토리 기준으로 docker build를 실행합니다.
+                    // Docker 이미지 빌드
                     sh 'docker build -t morjhkim/springboot:latest .'
                 }
             }
