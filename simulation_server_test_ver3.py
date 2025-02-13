@@ -34,6 +34,9 @@ UPDATE_INTERVAL = 0.1
 SIM_FINISHED = False
 SIM_APP_RUNNING = False
 
+# 새로 추가된 전역 변수: 시뮬레이션 종료 요청 플래그
+SIM_TERMINATE = False
+
 current_time_paused = None
 delivered_count_paused = None
 current_positions = []
@@ -72,7 +75,7 @@ exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
 
 # ─── 헬퍼 함수: 통로 영역 판별 ─────────────────────────────
 def is_in_corridor(cell):
-    """통로 영역: row가 2~4, col이 2~4 (필요에 따라 수정)"""
+    """예제: 통로 영역을 row가 2~4, col이 2~4 인 영역으로 정의 (필요에 따라 수정)"""
     row, col = cell
     return (2 <= row <= 4) and (2 <= col <= 4)
 # ─────────────────────────────────────────────────────
@@ -95,21 +98,21 @@ def create_app(port):
     # -----------------------------------------
     # BFS 경로 탐색
     # -----------------------------------------
-    def bfs_path(start, goal, current_time, cell_blocked, congestion_count, avoid_corridor=False):
+    def bfs_path(start, goal, current_time, cell_blocked, congestion_count):
         if start == goal:
             return [start]
         visited = {start: None}
         queue = deque([start])
         while queue:
+            # 종료 요청 체크
+            if SIM_TERMINATE:
+                return None
             r, c = queue.popleft()
             for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 nr, nc = r + dr, c + dc
                 if not (0 <= nr < ROWS and 0 <= nc < COLS):
                     continue
                 if MAP[nr][nc] == 1:
-                    continue
-                # ※ avoid_corridor 옵션: 목표가 아니면 통로 셀은 건너뛰기
-                if avoid_corridor and (nr, nc) != goal and is_in_corridor((nr, nc)):
                     continue
                 if (nr, nc) in cell_blocked and cell_blocked[(nr, nc)] > current_time:
                     congestion_count[(nr, nc)] += 1
@@ -128,7 +131,7 @@ def create_app(port):
                     return path
         return None
 
-    # --- 실시간 목표 재설계 함수 (기존과 동일) ---
+    # --- 실시간 목표 재설계 함수 ---
     def find_nearest_exit(pos, current_agv_id=None):
         available = []
         for ex in exit_coords:
@@ -164,7 +167,7 @@ def create_app(port):
             return min(available, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
         else:
             return min(exit_coords, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
-
+    
     def find_nearest_shelf(pos, current_agv_id=None):
         available = []
         for sh in shelf_coords:
@@ -328,11 +331,10 @@ def create_app(port):
             result = compute_simulation_result(SIM_STATS, sim_duration, agv_count)
             socketio.emit('simulation_final', result)
 
-    # -----------------------------------------
-    # AGV 이동 프로세스 (agv_process) – 수정된 부분
-    # -----------------------------------------
     def agv_process(agv, env, stats, sim_duration, cell_blocked):
         while env.now < sim_duration:
+            if SIM_TERMINATE:
+                break
             # ① 현재 셀에 낮은 id를 가진 AGV가 있으면 대기
             current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
             conflict_found = False
@@ -379,27 +381,29 @@ def create_app(port):
             if len(agv.path) > 1:
                 next_cell = agv.path[1]
 
-                # ※ 현재 목표 재설계 (이 부분은 그대로 유지)
-                if agv.cargo == 0:
-                    target = find_nearest_shelf(current_cell, agv.id)
-                else:
-                    target = find_nearest_exit(current_cell, agv.id)
-                if is_in_corridor(next_cell):
-                    # 통로 내에 있는 AGV들의 id 리스트를 확인하고,
-                    # 자신이 최우선(가장 낮은 id)이 아니라면 avoid_corridor 옵션으로 경로 재탐색
-                    corridor_ids = [other.id for other in SIM_AGVS if is_in_corridor((int(round(other.pos[0])), int(round(other.pos[1]))))]
-                    if corridor_ids and agv.id != min(corridor_ids):
-                        new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), avoid_corridor=True)
-                        if new_path and len(new_path) > 1:
-                            agv.path = new_path
-                            next_cell = agv.path[1]
-                # 기존 후진 기능 (피치 못할 경우)
+                # [추가] 현재 다른 AGV의 정수 위치들을 확인하여, 만약 next_cell가 이미 다른 AGV의 현재 위치라면 바로 재설계
+                occupied_cells = {(int(round(other.pos[0])), int(round(other.pos[1]))) for other in SIM_AGVS if other.id != agv.id}
+                if next_cell in occupied_cells:
+                    if agv.cargo == 0:
+                        target = find_nearest_shelf(current_cell, agv.id)
+                    else:
+                        target = find_nearest_exit(current_cell, agv.id)
+                    new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int))
+                    if new_path and len(new_path) > 1:
+                        agv.path = new_path
+                        next_cell = agv.path[1]
+                    else:
+                        yield env.timeout(0.1)
+                        continue
+
+                # ★ 수정된 부분: 수직 통로에서 반대 방향 진행 시 후진 처리 (오직 둘 다 통로 내에 있을 때만)
                 cur_dir = (next_cell[0] - current_cell[0], next_cell[1] - current_cell[1])
                 if abs(cur_dir[0]) > 0 and abs(cur_dir[1]) < 1e-6:  # 수직 이동인 경우
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
                         other_cell = (int(round(other.pos[0])), int(round(other.pos[1])))
+                        # 오직 두 AGV 모두 통로 내에 있을 때만 후진 시도
                         if is_in_corridor(current_cell) and is_in_corridor(other_cell):
                             if other.path and len(other.path) > 1:
                                 other_dir = (other.path[1][0] - other_cell[0], other.path[1][1] - other_cell[1])
@@ -414,23 +418,19 @@ def create_app(port):
                                         agv.path = [current_cell, reverse_cell, current_cell] + agv.path[1:]
                                         next_cell = agv.path[1]
                                         break
+                    # (else 분기는 제거)
 
-                # ④-1. 다음 셀 예약 및 충돌 회피 – **수정된 부분**  
-                # 기존에는 다른 AGV의 id가 낮은 경우에만 충돌로 판단했지만,
-                # 이제는 *모든* AGV가 해당 셀에 있는 경우를 충돌로 판단합니다.
+                # ④-1. 다음 셀 예약 및 충돌 회피 (낮은 id 우선 및 스왑 충돌 체크)
                 wait_count = 0
                 max_wait = 50  # 0.1초씩 약 5초 대기
                 while True:
+                    if SIM_TERMINATE:
+                        break
                     collision = False
                     for other in SIM_AGVS:
                         if other.id == agv.id:
                             continue
                         other_current = (int(round(other.pos[0])), int(round(other.pos[1])))
-                        # **추가: 다음 셀이 다른 AGV의 현재 위치와 동일하면 충돌**
-                        if next_cell == other_current:
-                            collision = True
-                            break
-                        # 기존 swap 충돌 체크 (두 AGV가 서로 자리 교환하는 경우, 우선순위가 낮으면 대기)
                         if other.path and len(other.path) > 1:
                             other_next = other.path[1]
                         else:
@@ -438,9 +438,11 @@ def create_app(port):
                         if next_cell == other_next and other.id < agv.id:
                             collision = True
                             break
-                        # 근접 거리 체크
+                        if next_cell == other_current and other_next == current_cell:
+                            collision = True
+                            break
                         dist = ((other.pos[0] - next_cell[0])**2 + (other.pos[1] - next_cell[1])**2)**0.5
-                        if dist < 0.2:
+                        if dist < 0.2 and other.id < agv.id:
                             collision = True
                             break
                     if collision:
@@ -461,18 +463,20 @@ def create_app(port):
                     else:
                         break
 
-                # ④-2. 예약 처리: 다음 셀이 이미 다른 AGV에 의해 예약되어 있으면 대기
+                # ④-2. 예약 처리: 만약 다음 셀이 이미 다른 AGV에 의해 예약되어 있으면 대기
                 while next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] != agv.id:
                     yield env.timeout(0.1)
                 RESERVED_CELLS[next_cell] = agv.id
 
-                # ④-3. 이동 (부드러운 STEP_SIZE 단위 이동) 
+                # ④-3. 이동 (부드러운 STEP_SIZE 단위 이동)
                 current_pos = agv.pos
                 dx = next_cell[0] - current_pos[0]
                 dy = next_cell[1] - current_pos[1]
-                distance = (dx**2 + dy**2)**0.5 # 가야하는 위치에 대해서 지정함.
+                distance = (dx**2 + dy**2)**0.5
                 num_steps = int(distance / STEP_SIZE)
                 for _ in range(num_steps):
+                    if SIM_TERMINATE:
+                        break
                     current_pos = (
                         current_pos[0] + STEP_SIZE * dx / distance,
                         current_pos[1] + STEP_SIZE * dy / distance
@@ -500,7 +504,7 @@ def create_app(port):
             else:
                 yield env.timeout(0.1)
 
-            # ⑤ 적재/하역 조건 처리
+            # ⑤ 적재/하역 조건 처리 (실시간 대체 가능 장소 체크)
             current_int_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
             if agv.cargo == 0 and current_int_cell in shelf_coords:
                 available_shelf = find_nearest_shelf(current_int_cell, agv.id)
@@ -515,7 +519,7 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5))
+                yield env.timeout(random.uniform(0.5, 1.5)) # 결과값을 유동적으로 적용 
             elif agv.cargo == 1 and current_int_cell in exit_coords:
                 available_exit = find_nearest_exit(current_int_cell, agv.id)
                 if available_exit != current_int_cell:
@@ -529,18 +533,22 @@ def create_app(port):
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int))
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5))
-        # end while while문이 종료되는 시점.
-    # end agv_process agv_process가 끝나야함.
+                yield env.timeout(random.uniform(0.5, 1.5)) # 이동에 대안 변동성 부여
+        # end while
+    # end agv_process
 
     def record_stats(env, sim_duration, stats):
         while env.now < sim_duration:
+            if SIM_TERMINATE:
+                break
             stats.delivered_record[int(env.now)] = stats.delivered_count
             yield env.timeout(1)
 
     def record_interval_stats(env, sim_duration, stats):
         t = CHECK_INTERVAL
         while t <= sim_duration:
+            if SIM_TERMINATE:
+                break
             yield env.timeout(CHECK_INTERVAL)
             stats.delivered_history[t] = stats.delivered_count
             t += CHECK_INTERVAL
@@ -700,8 +708,7 @@ def create_app(port):
                     else:
                         global_speed_factor = float(speed_str)
                         if global_speed_factor <= 0:
-                            pause_simulation()
-                            is_paused = True
+                            socketio.emit('message', {'error': 'speed must be positive or "max"'})
                             return
                     if SIM_RUNNING:
                         socketio.emit('message', {'error': 'Simulation is already running'})
@@ -713,8 +720,8 @@ def create_app(port):
                     if new_speed <= 0:
                         socketio.emit('message', {'error': 'speed must be positive'})
                         return
-                    global_speed_factor = 1.0 / new_speed
-                    restart_simulation_with_current_state()
+                    # 아래의 update_speed 핸들러에서 처리하도록 함
+                    socketio.emit('update_speed', {'speed': new_speed})
                 except Exception as e:
                     socketio.emit('message', {'error': str(e)})
             if 'agv_count' in data:
@@ -779,16 +786,31 @@ def create_app(port):
 
     @socketio.on('update_speed')
     def handle_update_speed(data):
-        global global_speed_factor
+        global global_speed_factor, SIM_RUNNING, SIM_TERMINATE, SIM_FINISHED, current_time_paused
         try:
-            new_speed = 1.0 / float(data.get('speed'))
+            new_speed = float(data.get('speed'))
             if new_speed <= 0:
                 emit('error', {'message': 'speed must be positive'})
                 return
-            global_speed_factor = new_speed
-            restart_simulation_with_current_state()
+
+            # 현재 시뮬레이션이 실행 중이면 상태 저장 후 안전하게 종료 요청
+            if SIM_RUNNING:
+                pause_simulation()  # 현재 상태 저장
+                SIM_TERMINATE = True
+                # 시뮬레이션 태스크가 모두 종료될 때까지 대기
+                while not SIM_FINISHED:
+                    eventlet.sleep(0.1)
+                SIM_TERMINATE = False  # 종료 플래그 초기화
+
+            # 새 속도 반영 (RealtimEnvironment의 factor는 1/speed로 설정)
+            global_speed_factor = 1.0 / new_speed
+
+            # 저장된 상태가 있다면 새 속도로 재시작
+            if current_time_paused is not None:
+                resume_simulation()
+
             emit('status', {'message': f'Speed updated to {new_speed}'})
-            print(f"[update_speed] Global speed factor updated to: {new_speed}")
+            print(f"[update_speed] Global speed factor updated to: {global_speed_factor}")
         except Exception as e:
             emit('error', {'message': str(e)})
 
@@ -890,6 +912,7 @@ def run_server(port):
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
 def start_multi_server():
+    # 4개의 포트에 대한 값값
     ports = [5001, 5002, 5003, 5004]
     processes = []
     try:
