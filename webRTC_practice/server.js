@@ -120,7 +120,7 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-const PORT = 5000;
+const PORT = 6033;
 const HOST = "127.0.0.1";
 
 console.log(`서버 시작 중... (${HOST}:${PORT})`);

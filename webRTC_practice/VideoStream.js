@@ -28,7 +28,7 @@ const WebRTCStream = () => {
         };
 
         // WebSocket 연결
-        wsRef.current = new WebSocket("ws://127.0.0.1:5000/ws");
+        wsRef.current = new WebSocket("ws://127.0.0.1:6033/ws");
 
         wsRef.current.onopen = () => {
           console.log("WebSocket 연결됨");
