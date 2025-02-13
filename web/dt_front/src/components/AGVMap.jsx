@@ -8,9 +8,10 @@ import {
 } from "lucide-react";
 import { agvService } from "../api/agvService";
 import AGVControlPanel from "./AGVControlPanel";
-import TileMap from "./TileMap"; // Import the new TileMap component
+import TileMap from "./TileMap";
 
-const AGVMap = () => {
+const AGVMap = ({ onStateChange }) => {
+  // Add onStateChange prop here
   const [agvData, setAgvData] = useState([]);
   const [lastUpdate, setLastUpdate] = useState("");
   const agvPositions = useRef(new Map());
@@ -37,9 +38,86 @@ const AGVMap = () => {
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
   ];
 
-  const handleAgvClick = (agv, e) => {
-    e.stopPropagation(); // 맵 드래그 이벤트와 충돌 방지
+  useEffect(() => {
+    const interpolatePosition = (startX, startY, endX, endY, progress) => {
+      return {
+        x: startX + (endX - startX) * progress,
+        y: startY + (endY - startY) * progress,
+      };
+    };
 
+    const updateAGVPosition = (agvId, startX, startY, endX, endY, duration) => {
+      const startTime = performance.now();
+      const animate = (currentTime) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        const { x, y } = interpolatePosition(
+          startX,
+          startY,
+          endX,
+          endY,
+          progress
+        );
+        const agvElement = document.getElementById(`agv-${agvId}`);
+        if (agvElement) {
+          agvElement.style.transform = `translate(${x * cellSize}px, ${
+            y * cellSize
+          }px)`;
+        }
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+
+      requestAnimationFrame(animate);
+    };
+
+    const eventSource = agvService.getAgvStream();
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.success && data.agvs) {
+        data.agvs.forEach((newAgv) => {
+          const currentPos = agvPositions.current.get(newAgv.agv_id);
+          if (currentPos) {
+            if (
+              currentPos.x !== newAgv.location_y ||
+              currentPos.y !== newAgv.location_x
+            ) {
+              updateAGVPosition(
+                newAgv.agv_id,
+                currentPos.x,
+                currentPos.y,
+                newAgv.location_y,
+                newAgv.location_x,
+                1000
+              );
+            }
+          }
+          agvPositions.current.set(newAgv.agv_id, {
+            x: newAgv.location_y,
+            y: newAgv.location_x,
+          });
+        });
+
+        setAgvData(data.agvs);
+        // Call onStateChange prop with updated AGV data
+        if (onStateChange) {
+          onStateChange(data.agvs);
+        }
+        setLastUpdate(data.agvs[0]?.realtime || "");
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [onStateChange]); // Add onStateChange to dependency array
+
+  // Rest of your component code...
+  const handleAgvClick = (agv, e) => {
+    e.stopPropagation();
     setSelectedAgvs((prev) => {
       const isSelected = prev.some(
         (selected) => selected.agv_id === agv.agv_id
@@ -85,90 +163,6 @@ const AGVMap = () => {
     setIsDragging(false);
   };
 
-  useEffect(() => {
-    const interpolatePosition = (startX, startY, endX, endY, progress) => {
-      return {
-        x: startX + (endX - startX) * progress,
-        y: startY + (endY - startY) * progress,
-      };
-    };
-
-    const updateAGVPosition = (agvId, startX, startY, endX, endY, duration) => {
-      const startTime = performance.now();
-      const animate = (currentTime) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        const { x, y } = interpolatePosition(
-          startX,
-          startY,
-          endX,
-          endY,
-          progress
-        );
-        const agvElement = document.getElementById(`agv-${agvId}`);
-        if (agvElement) {
-          agvElement.style.transform = `translate(${x * cellSize}px, ${
-            y * cellSize
-          }px)`;
-        }
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        }
-      };
-
-      requestAnimationFrame(animate);
-    };
-
-    setAgvData([]);
-
-    const eventSource = agvService.getAgvStream();
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.success && data.agvs) {
-        data.agvs.forEach((newAgv) => {
-          const currentPos = agvPositions.current.get(newAgv.agv_id);
-          if (currentPos) {
-            if (
-              currentPos.x !== newAgv.location_y ||
-              currentPos.y !== newAgv.location_x
-            ) {
-              updateAGVPosition(
-                newAgv.agv_id,
-                currentPos.x,
-                currentPos.y,
-                newAgv.location_y,
-                newAgv.location_x,
-                1000
-              );
-            }
-          }
-          agvPositions.current.set(newAgv.agv_id, {
-            x: newAgv.location_y,
-            y: newAgv.location_x,
-          });
-
-          setSelectedAgvs((prev) => {
-            return prev.map((selectedAgv) => {
-              const updatedAgv = data.agvs.find(
-                (agv) => agv.agv_id === selectedAgv.agv_id
-              );
-              return updatedAgv || selectedAgv;
-            });
-          });
-        });
-
-        setAgvData(data.agvs);
-        setLastUpdate(data.agvs[0]?.realtime || "");
-      }
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, []);
-
   const getDirectionArrow = (direction) => {
     switch (direction?.toLowerCase()) {
       case "u":
@@ -203,19 +197,6 @@ const AGVMap = () => {
     if (!timeString) return "";
     const date = new Date(timeString);
     return date.toLocaleTimeString();
-  };
-
-  const getCellClassName = (cell) => {
-    switch (cell) {
-      case 0:
-        return "bg-white";
-      case 1:
-        return "bg-gray-100";
-      case 2:
-        return "bg-sky-100";
-      default:
-        return "bg-white";
-    }
   };
 
   return (
@@ -291,7 +272,6 @@ const AGVMap = () => {
         </div>
       </div>
 
-      {/* 사이드 제어 패널 */}
       <div className="w-96 flex-shrink-0">
         <AGVControlPanel
           selectedAgvs={selectedAgvs}
