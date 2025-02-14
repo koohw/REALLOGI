@@ -12,6 +12,10 @@ export default function AgvForm({ onSubmit }) {
     warehouseId: "",
   });
 
+  const baseUrl = process.env.REACT_APP_API_URL ;
+  const fullUrlforRegist = `${baseUrl}/agvs/register`;
+  
+
   useEffect(() => {
     // user 정보가 있을 때 warehouseId 설정
     if (user && user.warehouseId) {
@@ -32,8 +36,7 @@ export default function AgvForm({ onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post(
-        "http://localhost:8080/api/Agvs/register",
+      const response = await axios.post(fullUrlforRegist, 
         {
           ...formData,
           warehouseId: parseInt(formData.warehouseId),

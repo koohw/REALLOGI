@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/Agvs")
+@RequestMapping("/api/agvs")
 public class AgvController {
 
     private final AGVService agvService;
@@ -31,7 +31,7 @@ public class AgvController {
         }
     }
 
-    @GetMapping("/allAgv")
+    @GetMapping("/allAgvs")
     public BaseResponse<List<AGV>> getAllAgvs() {
         try {
             List<AGV> agvList = agvService.getAllAgvs();
