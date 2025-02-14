@@ -77,12 +77,12 @@ class PID:
         self.ki = ki
         self.kd = kd
         self.prev_error = 0 # 이전 오차 누적
-        self.integral = 0   # 적분값 누적적
+        self.integral = 0   # 적분값 누적
 
     def update(self, error, dt):
         self.integral += error * dt
         derivative = (error - self.prev_error) / dt if dt > 0 else 0
-        output = self.kp * error + self.ki * self.integral + self.kd * derivative   # 보정값값
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative   # 보정값
         self.prev_error = error # 이전 오차값 갱신.
         return output
 

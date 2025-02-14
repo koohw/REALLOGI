@@ -74,14 +74,33 @@ class MotorDriver:
         else:
             self.pwm.setDutycycle(self.PWMB, 0)
 
+class KalmanFilter:
+    def __init__(self, Q=0.001, R=0.1):
+        self.Q = Q
+        self.R = R
+        self.P = 1.0
+        self.X = 0.0
+        self.velocity = 0.0
+
+    def update(self, measurement, dt):
+        predicted_position = self.X + self.velocity * dt
+        self.P = self.P + self.Q
+        K = self.P / (self.P + self.R)
+        position_error = measurement - predicted_position
+        self.X = predicted_position + K * position_error
+        if dt > 0:
+            self.velocity += K * (position_error / dt)
+        self.P = (1 - K) * self.P
+        return self.velocity
+    
 # --- PID 컨트롤러 (mvp.py와 distance.py 동일) ---
 class PID:
     def __init__(self, kp, ki, kd):
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        self.prev_error = 0
-        self.integral = 0
+        self.prev_error = 0 # 이전 오차 누적
+        self.integral = 0   # 적분값 누적
 
     def update(self, error, dt):
         self.integral += error * dt
@@ -102,9 +121,9 @@ class MPU6050:
 
     def init_sensor(self):
         # MPU6050 초기화: 전원 관리, 감도 설정
-        self.bus.write_byte_data(self.address, 0x6B, 0x00)
-        self.bus.write_byte_data(self.address, 0x1C, 0x00)
-        self.bus.write_byte_data(self.address, 0x1B, 0x00)
+        self.bus.write_byte_data(self.address, 0x6B, 0x00)  # 전원 관리 1 레지스터: 슬립 모드 해제
+        self.bus.write_byte_data(self.address, 0x1C, 0x00)  # 가속도 감도 설정
+        self.bus.write_byte_data(self.address, 0x1B, 0x00)  # 자이로 감도 설정
         time.sleep(0.1)
 
     def calibrate_sensor(self):
@@ -206,8 +225,10 @@ def line_following_with_qr():
     frame_center = frame_width // 2
 
     # I2C 버스 및 MPU6050 초기화 (가속도계/자이로 센서)
-    bus = smbus.SMBus(1)
+    bus = smbus.SMBus(7)
     mpu = MPU6050(bus)
+    kalman_x = KalmanFilter(Q=0.001, R=0.1)
+    kalman_y = KalmanFilter(Q=0.001, R=0.1)
 
     # PID 및 속도 설정 (mvp.py의 값 사용)
     pid = PID(kp=0.1, ki=0.0, kd=0.01)
@@ -216,9 +237,19 @@ def line_following_with_qr():
     prev_time = time.time()
     prev_correction = 0
 
-    # 가속도계 기반 거리 및 속도 측정을 위한 변수 (distance.py 방식)
-    velocity_forward = 0.0  # 단위: m/s
-    position_forward = 0.0  # 단위: m
+    # 내부 좌표계: index0 -> x, index1 -> y
+    # 문제 설명에 따라 출발지는 (8, 0)로 설정 (출력 순서는 (y, x))
+    position = np.array([0.0, 8.0])
+    velocity = np.array([0.0, 0.0])
+    # 시작 위치(가속도계 기준): 라인트래킹 시작 시 재설정함
+    start_position = position.copy()
+    # 시뮬레이션 상 각도 (자이로 데이터로 갱신)
+    angle = 0.0  
+
+    # 간단한 노이즈 필터링 계수 및 중력 상수 (m/s^2)
+    alpha = 0.1
+    gravity = 9.81
+    prev_time = time.time()
 
     # 상태 정의
     STATE_WAIT_START = 0   # 출발지 QR 대기
