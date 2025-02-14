@@ -22,7 +22,7 @@ logging.basicConfig(
 # --------------------------------------------------
 
 ##############################################################################
-# MQTT 설정
+# MQTT 설정 (현재는 MQTT 연동 없이 시뮬레이션만 진행하지만 AGV1은 MQTT 통신 사용)
 ##############################################################################
 BROKER = "broker.hivemq.com"
 PORT = 1883
@@ -32,14 +32,17 @@ TOPIC_STATUS_FROM_DEVICE = "agv/status"      # 하드웨어 → 서버 ACK/상�
 mqtt_client = mqtt.Client(client_id="simulation_server", protocol=mqtt.MQTTv311)
 
 def on_message(client, userdata, msg):
-    """MQTT 콜백: dummy 하드웨어(AGV 1) ACK 수신 등"""
+    """
+    MQTT 콜백: 하드웨어(AGV 1)에서 각 좌표 이동 완료 시 ACK 메시지를 수신합니다.
+    (현재는 모든 AGV를 동일하게 처리하지만, AGV1에 대해서는 full_path의 진행에 따라 위치를 갱신)
+    """
     try:
         payload = json.loads(msg.payload.decode())
         if payload.get("ack"):
-            location = payload.get("location")
+            ack_location = tuple(payload.get("location"))
             with data_lock:
-                shared_data["positions"]["AGV 1"] = tuple(location)
-            logging.info("[SIM] ACK 수신, AGV 1 위치 업데이트: %s", location)
+                shared_data["positions"]["AGV 1"] = ack_location
+            logging.info("[SIM] ACK 수신, AGV 1 위치 업데이트: %s", ack_location)
         else:
             logging.info("[SIM] ACK 아닌 메시지: %s", payload)
     except Exception as e:
@@ -108,6 +111,9 @@ shared_data = {
     },
     "agv1_target": None,
     "agv1_moving_ack": False,
+    "agv1_path": [],              
+    "agv1_expected_target": None, 
+    "agv1_last_command_time": 0,  
     "order_completed": {
         "AGV 1": 0,
         "AGV 2": 0,
@@ -121,24 +127,24 @@ shared_data = {
 ##############################################################################
 # 3) BFS 경로 탐색 함수 (너비 우선 탐색)
 ##############################################################################
-def bfs_path(grid, start, goal, obstacles=set()):
+def bfs_path(grid, start, goal, obstacles):
     if not start or not goal:
         return None
     queue = deque([(start, [start])])
     visited = set([start])
-    directions = [(0,1), (0,-1), (1,0), (-1,0)]
+    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
     while queue:
         current, path = queue.popleft()
         if current == goal:
             return path
         r, c = current
         for dr, dc in directions:
-            nr, nc = r+dr, c+dc
+            nr, nc = r + dr, c + dc
             if 0 <= nr < ROWS and 0 <= nc < COLS:
                 if grid[nr][nc] != 1 and ((nr, nc) == goal or (nr, nc) not in obstacles):
                     if (nr, nc) not in visited:
                         visited.add((nr, nc))
-                        queue.append(((nr, nc), path+[(nr, nc)]))
+                        queue.append(((nr, nc), path + [(nr, nc)]))
     return None
 
 ##############################################################################
@@ -159,9 +165,13 @@ def compute_direction(curr, nxt):
         return ""
 
 ##############################################################################
-# 5) MQTT 통신: 전체 경로 명령 전송 (AGV 1)
+# 5) MQTT 통신: 전체 경로 명령 전송 (AGV1 전용)
 ##############################################################################
 def send_full_path_to_agv1(full_path):
+    with data_lock:
+        current = shared_data["positions"]["AGV 1"]
+    if full_path[0] != current:
+        full_path.insert(0, current)
     logging.debug("[SIM] send_full_path_to_agv1(full_path=%s)", full_path)
     payload = {
         "command": "PATH",
@@ -172,13 +182,16 @@ def send_full_path_to_agv1(full_path):
     result = mqtt_client.publish(TOPIC_COMMAND_TO_DEVICE, json.dumps(payload))
     if result[0] == 0:
         logging.info("[SIM] PATH 명령 전송 성공: %s", payload)
+        with data_lock:
+            shared_data["agv1_path"] = full_path
+            shared_data["agv1_last_command_time"] = time.time()
     else:
         logging.error("[SIM] PATH 명령 전송 실패: %s", payload)
 
 ##############################################################################
 # 6) 전체 경로 계산 함수
 ##############################################################################
-def calculate_full_path(start, goal, obstacles=set()):
+def calculate_full_path(start, goal, obstacles):
     path = bfs_path(map_data, start, goal, obstacles)
     if path is None:
         logging.warning("경로 탐색 실패: 시작 %s, 목표 %s, 장애물: %s", start, goal, obstacles)
@@ -190,13 +203,12 @@ def calculate_full_path(start, goal, obstacles=set()):
 # 7) Manhattan 거리 계산 함수
 ##############################################################################
 def manhattan_distance(a, b):
-    return abs(a[0]-b[0]) + abs(a[1]-b[1])
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 ##############################################################################
 # 8) Deadlock 체크 함수 (필요시 사용)
 ##############################################################################
 DEADLOCK_THRESHOLD = 5
-
 def check_deadlock(agv_positions, shared_data):
     deadlock_list = []
     with data_lock:
@@ -218,13 +230,16 @@ def check_deadlock(agv_positions, shared_data):
 # 9) AGV 프로세스 및 이동 함수 (충돌 회피 및 장애물 고려)
 ##############################################################################
 MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
-SIMULATE_MQTT = True  # AGV 1은 MQTT로 경로 전송
+SIMULATE_MQTT = False  # AGV1은 MQTT로 전체 경로 명령 전송
 
-def random_start_position():
-    return (8, 0)
+# 시작 위치를 AGV마다 다르게 할당합니다.
+def random_start_position(agv_id):
+    # 예: AGV 1: (8,0), AGV 2: (8,2), AGV 3: (8,4), AGV 4: (8,6)
+    col = (agv_id * 2) % COLS
+    return (ROWS - 1, col)
 
-def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
-    init_pos = random_start_position()
+def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
+    init_pos = random_start_position(agv_id)
     agv_positions[agv_id] = init_pos
     logs[agv_id].append((datetime.now().isoformat(), init_pos))
     key = f"AGV {agv_id+1}"
@@ -237,14 +252,20 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
     logging.debug("AGV %s 시작 위치: %s", agv_id, init_pos)
 
     while True:
-        # 1) 선반(적재) 이동: 목표 업데이트 후 이동
+        # 선반(적재) 이동: 임의의 선반 좌표 선택, 현재 위치와 다르게 선택
         loading_target = random.choice(shelf_coords)
+        with data_lock:
+            current = shared_data["positions"][key]
+        while loading_target == current:
+            loading_target = random.choice(shelf_coords)
         with data_lock:
             shared_data["target"][key] = loading_target
             shared_data["statuses"][key] = "RUNNING"
+            if agv_id == 0:
+                shared_data["agv1_expected_target"] = loading_target
         yield from move_to(env, agv_id, agv_positions, logs, loading_target)
 
-        # 10초 대기 (적재)
+        # 도착 후 10초간 하역 상태 유지
         with data_lock:
             shared_data["statuses"][key] = "LOADING"
             shared_data["directions"][key] = ""
@@ -252,11 +273,17 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
         yield env.timeout(10)
         loading_complete_time = env.now
 
-        # 2) 출구(하역) 이동: 목표 업데이트 후 이동
+        # 출구(하역) 이동: 임의의 출구 좌표 선택, 현재 위치와 다르게 선택
         exit_target = random.choice(exit_coords)
+        with data_lock:
+            current = shared_data["positions"][key]
+        while exit_target == current:
+            exit_target = random.choice(exit_coords)
         with data_lock:
             shared_data["target"][key] = exit_target
             shared_data["statuses"][key] = "UNLOADING"
+            if agv_id == 0:
+                shared_data["agv1_expected_target"] = exit_target
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
         unloading_complete_time = env.now
 
@@ -278,16 +305,16 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
 
 def move_to(env, agv_id, agv_positions, logs, target):
     """
-    충돌 회피(Collision Avoidance):
-      1. 먼저 target이 다른 AGV에 의해 점유되어 있는지 확인하고,
-         target이 완전히 비워질 때까지 1초마다 반복해서 대기.
-      2. 이후, 장애물(obstacles) 목록에 자기 자신의 target을 제외한 다른 AGV의 현재 위치들을 포함하여 BFS 경로를 계산.
-      3. AGV 1의 경우, 전체 경로를 한 번에 "PATH" 명령으로 전송하고, dummy AGV가 전송한 ACK를 통해 최종 target에 도달했는지 확인.
+    충돌 회피:
+      1. 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기.
+      2. 매 이동 단계마다 다른 AGV의 현재 위치를 장애물로 포함하여 BFS 경로를 재계산.
+      3. AGV1의 경우, 전체 경로를 미리 계산하여 MQTT로 전달하고,
+         하드웨어가 각 칸 이동 후 보내는 ACK로 위치와 방향을 업데이트.
+      4. 다른 AGV는 BFS 경로에 따라 한 칸씩 이동.
     """
     key = f"AGV {agv_id+1}"
-    
-    # (A) target 점유 확인: 다른 AGV가 이미 target 위치에 있다면,
-    # 그 자리가 완전히 비워질 때까지 1초마다 계속 대기.
+
+    # 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기
     while True:
         with data_lock:
             occupied = any(pos == target for oid, pos in agv_positions.items() if oid != agv_id)
@@ -295,48 +322,82 @@ def move_to(env, agv_id, agv_positions, logs, target):
             break
         logging.info("%s 대기: 목표 %s가 다른 AGV에 의해 점유됨", key, target)
         yield env.timeout(1)
-    
-    # (B) 장애물 구성: 다른 AGV들의 현재 위치 (단, 자기 자신의 target은 제외)
+
+    if agv_id == 0 and SIMULATE_MQTT:
+        # AGV1: 전체 경로 계산 및 MQTT 전달
+        with data_lock:
+            current = agv_positions[agv_id]
+            obstacles = { pos for oid, pos in agv_positions.items() if oid != agv_id }
+        path = calculate_full_path(current, target, obstacles)
+        if not path or len(path) < 2:
+            logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s)", key, current, target)
+            yield env.timeout(0.5)
+        else:
+            send_full_path_to_agv1(path)
+            # 하드웨어가 전체 경로를 따라 각 칸 이동 후 ACK를 보내면
+            # shared_data["positions"]["AGV 1"]가 갱신됩니다.
+            while True:
+                yield env.timeout(0.5)
+                with data_lock:
+                    current = shared_data["positions"][key]
+                    agv_positions[agv_id] = current
+                # 현재 위치가 전체 경로 상 어디인지 확인하여 다음 이동 방향 업데이트
+                try:
+                    idx = path.index(current)
+                    if idx < len(path) - 1:
+                        with data_lock:
+                            shared_data["directions"][key] = compute_direction(current, path[idx+1])
+                except ValueError:
+                    pass
+                if current == target:
+                    break
+            with data_lock:
+                agv_positions[agv_id] = target
+        return
+
+    # 나머지 AGV: 한 칸씩 이동
     while True:
         with data_lock:
-            current_pos = agv_positions[agv_id]
-        if current_pos == target:
+            current = agv_positions[agv_id]
+        if current == target:
             break
         with data_lock:
-            obstacles = { pos for oid, pos in agv_positions.items() if oid != agv_id and pos != target }
-        logging.debug("%s 이동: start=%s, target=%s, 장애물=%s", key, current_pos, target, obstacles)
-        path = calculate_full_path(current_pos, target, obstacles=obstacles)
+            obstacles = { pos for oid, pos in agv_positions.items() if oid != agv_id }
+        path = calculate_full_path(current, target, obstacles)
         if not path or len(path) < 2:
-            logging.warning("%s BFS 경로 없음: start=%s, target=%s, 장애물=%s", key, current_pos, target, obstacles)
+            logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s, 장애물: %s)", key, current, target, obstacles)
             yield env.timeout(0.5)
             continue
-        break
-
-    logging.debug("%s 전체 경로: %s", key, path)
-
-    # AGV 1: 전체 경로를 한 번에 전송 ("PATH" 명령)
-    if agv_id == 0 and SIMULATE_MQTT:
-        send_full_path_to_agv1(path)
-        # dummy AGV가 전체 경로를 따라 이동하여, 최종 target에 도달할 때까지 대기
-        while True:
-            yield env.timeout(0.5)
+        logging.debug("%s 전체 경로: %s", key, path)
+        moved = False
+        for next_pos in path[1:]:
+            occupied = False
             with data_lock:
-                if shared_data["positions"]["AGV 1"] == target:
-                    break
-        with data_lock:
-            agv_positions[agv_id] = target
-    else:
-        for idx in range(1, len(path)):
+                for oid, pos in agv_positions.items():
+                    if oid != agv_id and pos == next_pos:
+                        occupied = True
+                        break
+            if occupied:
+                logging.info("%s: 다음 셀 %s 점유됨 - 경로 재계산", key, next_pos)
+                break
+            direction = compute_direction(current, next_pos)
+            with data_lock:
+                shared_data["directions"][key] = direction
             yield env.timeout(MOVE_INTERVAL)
-            next_pos = path[idx]
-            agv_positions[agv_id] = next_pos
             with data_lock:
+                agv_positions[agv_id] = next_pos
                 shared_data["positions"][key] = next_pos
                 shared_data["logs"][key].append({
                     "time": datetime.now().isoformat(),
                     "position": next_pos
                 })
-        logging.info("[%s] %s 도착 -> %s", datetime.now().isoformat(), key, target)
+            moved = True
+            if next_pos == target:
+                logging.info("[%s] %s 도착 -> %s", datetime.now().isoformat(), key, target)
+                break
+            current = next_pos
+        if not moved:
+            yield env.timeout(0.5)
 
 ##############################################################################
 # 10) 시뮬레이션 메인 함수
@@ -352,7 +413,7 @@ def simulation_main():
     agv_positions = {}
     logs = {}
     for i in range(NUM_AGV):
-        agv_positions[i] = (0, 0)
+        agv_positions[i] = None
         logs[i] = []
     for i in range(NUM_AGV):
         env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
