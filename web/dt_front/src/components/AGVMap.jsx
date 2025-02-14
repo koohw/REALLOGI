@@ -186,6 +186,8 @@ const AGVMap = ({ onStateChange }) => {
         return "#EF4444";
       case "EMERGENCY(STOPPED)":
         return "#DC2626";
+      case "LOADING":
+        return "#F59E0B";
       case "UNLOADING":
         return "#F59E0B";
       default:
