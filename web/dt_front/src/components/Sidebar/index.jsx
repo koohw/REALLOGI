@@ -20,7 +20,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 h-full bg-[#11263f] shadow-lg">
+    <div className="w-64 h-full bg-[#0A1829] shadow-lg">
       <div className="p-6">
         <h1 className="text-3xl font-bold mb-8 text-center text-white">
           RealLogi

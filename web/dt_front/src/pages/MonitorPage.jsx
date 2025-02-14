@@ -43,7 +43,7 @@ function MonitorPage() {
       </div>
 
       {/* Video Popup */}
-      {showVideo && <VideoPopup />}
+      {showVideo && <VideoPopup onClose={() => setShowVideo(false)} />}
     </div>
   );
 }
