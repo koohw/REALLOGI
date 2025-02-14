@@ -46,7 +46,7 @@ RESERVED_CELLS = {}
 # -----------------------------------------
 # 시뮬레이션 기본 상수
 # -----------------------------------------
-REPEAT_RUNS = 15   # 심층 분석 시 반복 횟수 (원하는 만큼 조정 가능)
+REPEAT_RUNS = 15   # 심층 분석 시 반복 횟수
 WARMUP_PERIOD = 30
 CHECK_INTERVAL = 3000
 MOVE_RATE = 1.0
@@ -201,49 +201,43 @@ def create_app(port):
                 "location_log": []
             })
 
+    # 수정: 각 AGV의 가동률(= 각 AGV의 업무 수행 시간 총합 / 전체 시뮬레이션 시간)을 포함하고, AGV 수도 반환
     def compute_simulation_result(stats, sim_duration, agv_count):
         final_agv_stats = {}
         for agv_id, data in stats.agv_stats.items():
             count = data["count"]
             times = data["times"]
             avg_time = sum(times)/len(times) if times else 0
+            utilization = sum(times) / sim_duration if sim_duration > 0 else 0
             final_agv_stats[agv_id] = {
                 "count": count,
                 "times": times,
                 "avg_time": avg_time,
                 "wait_times": data["wait_times"],
                 "travel_times": data["travel_times"],
-                "location_log": data["location_log"]
+                "location_log": data["location_log"],
+                "utilization": utilization
             }
         res = {
             "end_time": sim_duration,
             "delivered_count": stats.delivered_count,
             "delivered_history": stats.delivered_history,
             "delivered_record": dict(stats.delivered_record),
-            "agv_stats": final_agv_stats
+            "agv_stats": final_agv_stats,
+            "agv_count": agv_count
         }
         delivered_counts = res["delivered_count"]
         throughput = delivered_counts / sim_duration * 3600
         delivered_per_agv = delivered_counts / agv_count
-        all_cycle_times = []
-        all_wait_times = []
-        all_travel_times = []
-        for agv_stat in res["agv_stats"].values():
-            all_cycle_times.extend(agv_stat["times"])
-            all_wait_times.extend(agv_stat.get("wait_times", []))
-            all_travel_times.extend(agv_stat.get("travel_times", []))
-        avg_cycle = statistics.mean(all_cycle_times) if all_cycle_times else 0
-        avg_wait = statistics.mean(all_wait_times) if all_wait_times else 0
-        avg_travel = statistics.mean(all_travel_times) if all_travel_times else 0
         result = {
-            "agv_count": agv_count,
             "throughput_per_hour": throughput,
             "delivered_per_agv": delivered_per_agv,
-            "avg_cycle": avg_cycle,
-            "avg_wait": avg_wait,
-            "avg_travel": avg_travel
+            "avg_cycle": statistics.mean([d["avg_time"] for d in final_agv_stats.values()]) if final_agv_stats else 0,
+            "avg_wait": statistics.mean([statistics.mean(d["wait_times"]) if d["wait_times"] else 0 for d in final_agv_stats.values()]),
+            "avg_travel": statistics.mean([statistics.mean(d["travel_times"]) if d["travel_times"] else 0 for d in final_agv_stats.values()])
         }
-        return result
+        res.update(result)
+        return res
 
     def do_pick(agv, env, stats, cell_blocked):
         now = env.now
@@ -502,11 +496,15 @@ def create_app(port):
         avg_delivered = statistics.mean([r["delivered_per_agv"] for r in results]) if results else 0
         std_delivered = statistics.stdev([r["delivered_per_agv"] for r in results]) if len(results) > 1 else 0
         avg_cycle = statistics.mean([r["avg_cycle"] for r in results]) if results else 0
-        std_cycle = statistics.stdev([r["avg_cycle"] for r in results]) if len(results) > 1 else 0
         avg_wait = statistics.mean([r["avg_wait"] for r in results]) if results else 0
-        std_wait = statistics.stdev([r["avg_wait"] for r in results]) if len(results) > 1 else 0
         avg_travel = statistics.mean([r["avg_travel"] for r in results]) if results else 0
-        std_travel = statistics.stdev([r["avg_travel"] for r in results]) if len(results) > 1 else 0
+        # 각 AGV의 가동률 평균 계산
+        util_list = []
+        for r in results:
+            if "agv_stats" in r and r["agv_stats"]:
+                vals = [data.get("utilization", 0) for data in r["agv_stats"].values()]
+                util_list.append(statistics.mean(vals))
+        avg_util = statistics.mean(util_list) if util_list else 0
         avg_result = {
             "repeat_runs": repeat_runs,
             "agv_count": agv_count,
@@ -515,11 +513,9 @@ def create_app(port):
             "delivered_per_agv": avg_delivered,
             "std_delivered_per_agv": std_delivered,
             "avg_cycle": avg_cycle,
-            "std_cycle": std_cycle,
             "avg_wait": avg_wait,
-            "std_wait": std_wait,
             "avg_travel": avg_travel,
-            "std_travel": std_travel,
+            "avg_utilization": avg_util
         }
         return avg_result
 
@@ -534,7 +530,6 @@ def create_app(port):
         p = Process(target=analysis_worker, args=(agv_count, sim_duration, REPEAT_RUNS, q))
         p.start()
         result = None
-        # 비블로킹 폴링 (eventlet.sleep 사용)
         while result is None:
             if not q.empty():
                 result = q.get()
