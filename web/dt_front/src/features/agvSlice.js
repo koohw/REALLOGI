@@ -10,6 +10,7 @@ const initialState = {
     error: 0,
   },
   orderTotal: 0,
+  agvs: [], // AGV 상세 정보를 위한 상태 추가
 };
 
 const agvSlice = createSlice({
@@ -28,6 +29,9 @@ const agvSlice = createSlice({
     },
     updateOrderTotal: (state, action) => {
       state.orderTotal = action.payload;
+    },
+    updateAGVs: (state, action) => {
+      state.agvs = action.payload;
     },
   },
 });
