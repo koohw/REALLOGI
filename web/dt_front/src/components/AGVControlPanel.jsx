@@ -1,4 +1,3 @@
-// components/AGVControlPanel.jsx
 import React from "react";
 import { Pause, RotateCcw, Play, X } from "lucide-react";
 import { agvService } from "../api/agvService";
@@ -51,32 +50,35 @@ const AGVControlPanel = ({ selectedAgvs, onActionComplete, onDeselectAgv }) => {
   };
 
   return (
-    <div className="p-4 space-y-4 bg-white rounded-lg shadow">
+    <div className="p-4 space-y-4 bg-[#11263f] rounded-lg shadow-lg border border-gray-700">
+      {" "}
+      {/* 배경색 및 테두리 변경 */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">AGV 제어 패널</h3>
+        <h3 className="text-lg font-medium text-gray-200">AGV 제어 패널</h3>{" "}
+        {/* 텍스트 색상 변경 */}
         {selectedAgvs.length > 0 && (
           <button
             onClick={onActionComplete}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
+            className="text-sm text-gray-400 hover:text-gray-200 flex items-center transition-colors" /* 텍스트 색상 변경 */
           >
             <X className="w-4 h-4 mr-1" />
             선택 해제
           </button>
         )}
       </div>
-
       {error && (
-        <div className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded-md">
+        <div className="p-3 mb-4 text-sm text-red-200 bg-red-900 bg-opacity-50 rounded-md border border-red-700">
+          {" "}
+          {/* 에러 메시지 스타일 변경 */}
           {error}
         </div>
       )}
-
       <div className="flex gap-2">
         <Button
           variant="secondary"
           onClick={() => handleAction("stop")}
           disabled={isLoading || selectedAgvs.length === 0}
-          className="flex-1"
+          className="flex-1 bg-[#0D1B2A] hover:bg-gray-800 text-gray-200 border-gray-700" /* 버튼 스타일 변경 */
         >
           <Pause className="w-4 h-4 mr-2" />
           정지
@@ -85,7 +87,7 @@ const AGVControlPanel = ({ selectedAgvs, onActionComplete, onDeselectAgv }) => {
           variant="secondary"
           onClick={() => handleAction("return")}
           disabled={isLoading || selectedAgvs.length === 0}
-          className="flex-1"
+          className="flex-1 bg-[#0D1B2A] hover:bg-gray-800 text-gray-200 border-gray-700" /* 버튼 스타일 변경 */
         >
           <RotateCcw className="w-4 h-4 mr-2" />
           복귀
@@ -94,19 +96,18 @@ const AGVControlPanel = ({ selectedAgvs, onActionComplete, onDeselectAgv }) => {
           variant="secondary"
           onClick={() => handleAction("restart")}
           disabled={isLoading || selectedAgvs.length === 0}
-          className="flex-1"
+          className="flex-1 bg-[#0D1B2A] hover:bg-gray-800 text-gray-200 border-gray-700" /* 버튼 스타일 변경 */
         >
           <Play className="w-4 h-4 mr-2" />
           재가동
         </Button>
       </div>
-
       {isLoading && (
         <div className="flex items-center justify-center py-2">
-          <div className="w-5 h-5 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin"></div>
+          <div className="w-5 h-5 border-t-2 border-b-2 border-blue-400 rounded-full animate-spin"></div>{" "}
+          {/* 로딩 스피너 색상 변경 */}
         </div>
       )}
-
       <AGVSelectionInfo selectedAgvs={selectedAgvs} />
     </div>
   );

@@ -26,14 +26,14 @@ const AGVMap = ({ onStateChange }) => {
   const mapData = [
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0],
+    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0],
+    [0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0],
+    [0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
   ];
@@ -186,6 +186,8 @@ const AGVMap = ({ onStateChange }) => {
         return "#EF4444";
       case "EMERGENCY(STOPPED)":
         return "#DC2626";
+      case "LOADING":
+        return "#F59E0B";
       case "UNLOADING":
         return "#F59E0B";
       default:
@@ -202,11 +204,8 @@ const AGVMap = ({ onStateChange }) => {
   return (
     <div className="flex gap-4 h-full w-full">
       <div className="flex-1 flex flex-col">
-        <div className="mb-1 text-sm text-gray-600">
-          Last Update: {formatTime(lastUpdate)}
-        </div>
         <div
-          className="relative overflow-hidden border rounded-lg shadow-lg flex-1"
+          className="relative overflow-hidden border border-gray-700 rounded-lg shadow-lg flex-1"
           onClick={handleMapClick}
         >
           <div
@@ -269,6 +268,9 @@ const AGVMap = ({ onStateChange }) => {
               );
             })}
           </div>
+        </div>
+        <div className="mb-1 text-sm text-gray-600">
+          Last Update: {formatTime(lastUpdate)}
         </div>
       </div>
 
