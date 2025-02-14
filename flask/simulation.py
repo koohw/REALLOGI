@@ -388,6 +388,7 @@ shared_data = {
     "logs": {"AGV 1": [], "AGV 2": [], "AGV 3": [], "AGV 4": []},
     "statuses": {"AGV 1": "", "AGV 2": "", "AGV 3": "", "AGV 4": ""},
     "directions": {"AGV 1": "", "AGV 2": "", "AGV 3": "", "AGV 4": ""},
+    "target": {"AGV 1": None, "AGV 2": None, "AGV 3": None, "AGV 4": None},
     "agv1_target": None,
     "agv1_moving_ack": False,
     "order_completed": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
@@ -473,35 +474,31 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
         # 1) 선반 이동 (적재 대상)
         loading_target = random.choice(shelf_coords)
         with data_lock:
+            shared_data["target"][key] = loading_target  # 목표 업데이트
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, loading_target)
         
         # 10초 대기 (적재)
         with data_lock:
-            shared_data["statuses"][key] = "LOADING"  # 적재 단계 표시
+            shared_data["statuses"][key] = "LOADING"
             shared_data["directions"][key] = ""
         yield env.timeout(10)
-        # 적재 완료 시점 기록
         loading_complete_time = env.now
 
         # 2) 출구 이동 (하역 대상)
         exit_target = random.choice(exit_coords)
         with data_lock:
+            shared_data["target"][key] = exit_target  # 목표 업데이트
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
         
-        # 5초 대기 (하역)
         yield env.timeout(5)
-        # 하역 완료 시점 기록
         unloading_complete_time = env.now
         
-        # 사이클 효율성 계산: 적재 완료 후 하역 완료까지 걸린 시간
+        # 효율성 계산(이전 내용 유지)
         cycle_efficiency = unloading_complete_time - loading_complete_time
-
-        # 지수이동평균 방식으로 AGV별 효율성 업데이트
         with data_lock:
-            alpha = 0.5  # 최신 사이클에 부여할 가중치 (0~1)
-            # 첫 사이클이면 그대로 저장, 이후엔 EMA 방식 업데이트
+            alpha = 0.5
             if shared_data["order_completed"][key] == 0:
                 shared_data["efficiency"][key] = cycle_efficiency
             else:
@@ -509,32 +506,56 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
             shared_data["order_completed"][key] += 1
 
 
+def manhattan_distance(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 def move_to(env, agv_id, agv_positions, logs, target):
     key = f"AGV {agv_id+1}"
     current_pos = agv_positions[agv_id]
-    others = {k:pos for k,pos in agv_positions.items() if k!=agv_id}
-    path = calculate_full_path(current_pos, target, obstacles=set(others.values()))
+    
+    # 현재 AGV의 남은 거리를 계산 (맨해튼 거리 사용)
+    my_remaining = manhattan_distance(current_pos, target)
+    obstacles = set()
+    
+    with data_lock:
+        for other_id, pos in agv_positions.items():
+            if other_id == agv_id:
+                continue
+            other_key = f"AGV {other_id+1}"
+            other_status = shared_data["statuses"][other_key]
+            if other_status in ["LOADING", "UNLOADING"]:
+                # 적재중이나 하역중이면 무조건 장애물로 인식
+                obstacles.add(pos)
+            elif other_status == "RUNNING":
+                other_target = shared_data["target"].get(other_key)
+                if other_target is not None:
+                    other_remaining = manhattan_distance(pos, other_target)
+                    # 만약 다른 AGV의 남은 경로가 내 남은 경로보다 짧다면,
+                    # 다른 AGV가 우선순위가 높으므로 그 위치를 장애물로 추가
+                    if other_remaining < my_remaining:
+                        obstacles.add(pos)
+                else:
+                    obstacles.add(pos)
+    
+    path = calculate_full_path(current_pos, target, obstacles=obstacles)
     if not path:
-        logging.error("move_to() BFS 실패: %s->%s", current_pos, target)
+        logging.error("move_to() BFS 실패: %s -> %s", current_pos, target)
         return
     logging.debug("AGV %s BFS 경로: %s", agv_id, path)
 
-    if agv_id==0 and SIMULATE_MQTT:
+    # MQTT 시뮬레이션 관련 처리 (AGV 1만 해당)
+    if agv_id == 0 and SIMULATE_MQTT:
         with data_lock:
             shared_data["agv1_moving_ack"] = False
         send_full_path_to_agv1(path)
         ack_received = False
-        # ACK 기다림
         while not ack_received:
             yield env.timeout(0.2)
             with data_lock:
                 if shared_data["agv1_moving_ack"]:
                     ack_received = True
-        # ACK 후 위치=목표
         agv_positions[agv_id] = target
     else:
-        # BFS 경로 따라 1초씩 이동
         for idx in range(1, len(path)):
             nxt = path[idx]
             direction = compute_direction(agv_positions[agv_id], nxt)
@@ -550,6 +571,7 @@ def move_to(env, agv_id, agv_positions, logs, target):
                     "position": nxt
                 })
         logging.info("[%s] AGV %s 도착 -> %s", datetime.now().isoformat(), agv_id, target)
+
 
 try:
     from simpy.rt import RealtimeEnvironment
