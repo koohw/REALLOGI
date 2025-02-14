@@ -384,14 +384,17 @@ exit_coords = [(0,c) for c in range(COLS) if map_data[0][c]==2]
 # --------------------
 data_lock = Lock()
 shared_data = {
-    "positions":  {"AGV 1":None, "AGV 2":None, "AGV 3":None, "AGV 4":None},
-    "logs":       {"AGV 1":[],   "AGV 2":[],   "AGV 3":[],   "AGV 4":[]},
-    "statuses":   {"AGV 1":"",   "AGV 2":"",   "AGV 3":"",   "AGV 4":""},
-    "directions": {"AGV 1":"",   "AGV 2":"",   "AGV 3":"",   "AGV 4":""},
+    "positions": {"AGV 1": None, "AGV 2": None, "AGV 3": None, "AGV 4": None},
+    "logs": {"AGV 1": [], "AGV 2": [], "AGV 3": [], "AGV 4": []},
+    "statuses": {"AGV 1": "", "AGV 2": "", "AGV 3": "", "AGV 4": ""},
+    "directions": {"AGV 1": "", "AGV 2": "", "AGV 3": "", "AGV 4": ""},
     "agv1_target": None,
     "agv1_moving_ack": False,
-    "order_completed": {"AGV 1":0,"AGV 2":0,"AGV 3":0,"AGV 4":0}
+    "order_completed": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
+    "current_cycle_efficiencies": {},
+    "overall_efficiency": None
 }
+
 
 # --------------------
 # BFS 함수
@@ -449,12 +452,13 @@ def calculate_full_path(start, goal, obstacles=set()):
 # --------------------
 MOVE_INTERVAL = 1
 WAIT_INTERVAL = 1
-SIMULATE_MQTT = True  # AGV1만 MQTT
+SIMULATE_MQTT = False  # AGV1만 MQTT
 
 def random_start_position():
     return (8,0)
 
 def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
+    NUM_AGV = 4
     init_pos = random_start_position()
     agv_positions[agv_id] = init_pos
     logs[agv_id].append((datetime.now().isoformat(), init_pos))
@@ -471,22 +475,41 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, unloading_target)
 
-        # 10초 하역
+        # 10초 대기(적재재)
         with data_lock:
             shared_data["statuses"][key] = "UNLOADING"
             shared_data["directions"][key] = ""
         yield env.timeout(10)
+        # 적재 완료 시간 기록
+        loading_complete_time = env.now
 
         # 2) 출구 이동
         exit_target = random.choice(exit_coords)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
+        
 
-        # 5초 대기 후 order_completed++
+        # 5초 대기
         yield env.timeout(5)
+        # 하역 완료 시점 기록
+        unloading_complete_time = env.now
+
+        # 효율성 계산
+        efficiency = unloading_complete_time - loading_complete_time
+
+        # 효율성 계산 : 적재 완료 후 하역 완료까지 걸린 시간
         with data_lock:
-            shared_data["order_completed"][key]+=1
+            shared_data["current_cycle_efficiencies"][key] = efficiency
+            if len(shared_data["current_cycle_efficiencies"]) == NUM_AGV:
+                total = sum(shared_data["current_cycle_efficiencies"].values())
+                agv_efficiency = total / NUM_AGV
+                shared_data["overall_efficiency"] = agv_efficiency
+                # 다음 사이클을 위해 초기화
+                shared_data["current_cycle_efficiencies"].clear()
+            
+            shared_data["order_completed"][key] += 1
+
 
 def move_to(env, agv_id, agv_positions, logs, target):
     key = f"AGV {agv_id+1}"
