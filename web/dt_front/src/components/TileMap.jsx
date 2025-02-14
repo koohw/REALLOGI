@@ -7,13 +7,13 @@ const TileMap = ({ mapData, cellSize }) => {
         return {
           width: cellSize,
           height: cellSize,
-          backgroundColor: "rgb(255 255 255)",
+          backgroundColor: "#11263f", // 배경색 변경
         };
       case 1:
         return {
           width: cellSize,
           height: cellSize,
-          backgroundImage: "url(/images/box.jpg)", // 이미지를 public/images 폴더에서 참조
+          backgroundImage: "url(/images/box.jpg)",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -22,23 +22,29 @@ const TileMap = ({ mapData, cellSize }) => {
         return {
           width: cellSize,
           height: cellSize,
-          backgroundColor: "rgb(224 242 254)",
+          backgroundColor: "#0D1B2A", // 배경색 변경
         };
       default:
         return {
           width: cellSize,
           height: cellSize,
-          backgroundColor: "white",
+          backgroundColor: "#11263f", // 기본 배경색 변경
         };
     }
   };
 
   return (
-    <div className="absolute top-0 left-0 w-full h-full">
+    <div className="absolute top-0 left-0 w-full h-full bg-[#11263f]">
+      {" "}
+      {/* 전체 배경색 추가 */}
       {mapData.map((row, y) => (
         <div key={`row-${y}`} className="flex" style={{ height: cellSize }}>
           {row.map((cell, x) => (
-            <div key={`cell-${x}-${y}`} style={getCellStyle(cell)} />
+            <div
+              key={`cell-${x}-${y}`}
+              style={getCellStyle(cell)}
+              className="" // 셀 구분선 추가
+            />
           ))}
         </div>
       ))}
