@@ -109,35 +109,35 @@ app = Flask(__name__)
 CORS(app)
 
 def event_stream():
-    """
-    SSE 스트림 함수.
-    매 1초마다 shared_data에 저장된 AGV들의 상태를 JSON 형식으로 전송.
-    """
     default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
     while True:
         with data_lock:
+            overall_eff_sum = 0
+            count = 0
+            for key in default_keys:
+                if shared_data["order_completed"][key] > 0:
+                    overall_eff_sum += shared_data["efficiency"].get(key, 0)
+                    count += 1
+            overall_efficiency = overall_eff_sum / count if count else 0
+
+            # 기록: (현재 시간, 전체 평균 효율성)
+            shared_data["overall_efficiency_history"] = [(datetime.now().isoformat(), overall_efficiency)]
+
+            # 전송할 데이터에 포함
             agv_list = []
             for key in default_keys:
                 pos = shared_data["positions"].get(key)
                 state = shared_data["statuses"].get(key, "")
                 direction = shared_data["directions"].get(key, "")
                 logs_list = shared_data["logs"].get(key, [])
-                if logs_list and isinstance(logs_list[-1], dict):
-                    realtime = logs_list[-1].get("time", "")
-                else:
-                    realtime = ""
-
-                # AGV ID 추출
+                realtime = logs_list[-1].get("time", "") if logs_list and isinstance(logs_list[-1], dict) else ""
                 try:
                     agv_id = int(key.split()[-1])
                 except:
                     agv_id = 0
                 agv_name = f"agv{agv_id}"
-
-                loc_x = loc_y = ""
-                if pos:
-                    loc_x, loc_y = pos
-
+                loc_x = pos[0] if pos else ""
+                loc_y = pos[1] if pos else ""
                 agv_data = {
                     "agv_id": agv_id,
                     "agv_name": agv_name,
@@ -146,22 +146,22 @@ def event_stream():
                     "location_x": loc_x,
                     "location_y": loc_y,
                     "direction": direction,
-                    "realtime": realtime
+                    "realtime": realtime,
+                    "efficiency": shared_data["efficiency"].get(key, 0)
                 }
                 agv_list.append(agv_data)
-
-            order_success = shared_data.get("order_completed", {})
-            overall_efficiency = shared_data.get("overall_efficiency")
 
             data = {
                 "success": True,
                 "agv_number": len(agv_list),
                 "agvs": agv_list,
-                "order_success": order_success,
-                "everall_efficiency": overall_efficiency
+                "order_success": shared_data.get("order_completed", {}),
+                "overall_efficiency": overall_efficiency,
+                "overall_efficiency_history": shared_data["overall_efficiency_history"]
             }
         yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         time.sleep(1)
+
 
 @app.route("/api/agv-stream")
 def sse():

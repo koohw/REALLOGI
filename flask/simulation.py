@@ -392,7 +392,9 @@ shared_data = {
     "agv1_moving_ack": False,
     "order_completed": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
     "current_cycle_efficiencies": {},
-    "overall_efficiency": None
+    "efficiency" : {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
+    "efficiency_sum": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
+    "overall_efficiency_history": []
 }
 
 
@@ -458,7 +460,6 @@ def random_start_position():
     return (8,0)
 
 def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
-    NUM_AGV = 4
     init_pos = random_start_position()
     agv_positions[agv_id] = init_pos
     logs[agv_id].append((datetime.now().isoformat(), init_pos))
@@ -496,19 +497,13 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
         unloading_complete_time = env.now
 
         # 효율성 계산
-        efficiency = unloading_complete_time - loading_complete_time
+        cycle_efficiency = unloading_complete_time - loading_complete_time
 
         # 효율성 계산 : 적재 완료 후 하역 완료까지 걸린 시간
         with data_lock:
-            shared_data["current_cycle_efficiencies"][key] = efficiency
-            if len(shared_data["current_cycle_efficiencies"]) == NUM_AGV:
-                total = sum(shared_data["current_cycle_efficiencies"].values())
-                agv_efficiency = total / NUM_AGV
-                shared_data["overall_efficiency"] = agv_efficiency
-                # 다음 사이클을 위해 초기화
-                shared_data["current_cycle_efficiencies"].clear()
-            
+            shared_data["efficiency_sum"][key] += cycle_efficiency
             shared_data["order_completed"][key] += 1
+            shared_data["efficiency"][key] = shared_data["efficiency_sum"][key] / shared_data["order_completed"][key]
 
 
 def move_to(env, agv_id, agv_positions, logs, target):
