@@ -205,7 +205,7 @@ const AGVMap = ({ onStateChange }) => {
     <div className="flex gap-4 h-full w-full">
       <div className="flex-1 flex flex-col">
         <div
-          className="relative overflow-hidden border rounded-lg shadow-lg flex-1"
+          className="relative overflow-hidden border border-gray-700 rounded-lg shadow-lg flex-1"
           onClick={handleMapClick}
         >
           <div
