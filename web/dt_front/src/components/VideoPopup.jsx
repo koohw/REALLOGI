@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, Minimize2, Maximize2 } from "lucide-react";
 
-const VideoPopup = () => {
+const VideoPopup = ({ onClose }) => {
   const [streamStatus, setStreamStatus] = useState("연결 대기 중...");
   const [streamError, setStreamError] = useState(null);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -137,6 +137,12 @@ const VideoPopup = () => {
             className="text-white hover:text-gray-300 transition-colors"
           >
             {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-white hover:text-gray-300 transition-colors"
+          >
+            <X size={14} />
           </button>
         </div>
       </div>
