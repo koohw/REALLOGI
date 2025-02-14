@@ -120,10 +120,9 @@ def event_stream():
                     count += 1
             overall_efficiency = overall_eff_sum / count if count else 0
 
-            # 기록: (현재 시간, 전체 평균 효율성)
+            # history는 최신 데이터로 덮어쓰도록 함
             shared_data["overall_efficiency_history"] = [(datetime.now().isoformat(), overall_efficiency)]
 
-            # 전송할 데이터에 포함
             agv_list = []
             for key in default_keys:
                 pos = shared_data["positions"].get(key)
@@ -161,6 +160,7 @@ def event_stream():
             }
         yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         time.sleep(1)
+
 
 
 @app.route("/api/agv-stream")

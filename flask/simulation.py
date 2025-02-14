@@ -466,44 +466,48 @@ def agv_process(env, agv_id, agv_positions, logs, _, shelf_coords, exit_coords):
     key = f"AGV {agv_id+1}"
     with data_lock:
         shared_data["positions"][key] = init_pos
-        shared_data["logs"][key].append({"time": datetime.now().isoformat(),"position":init_pos})
+        shared_data["logs"][key].append({"time": datetime.now().isoformat(), "position": init_pos})
         shared_data["statuses"][key] = "RUNNING"
 
     while True:
-        # 1) 선반 이동
-        unloading_target = random.choice(shelf_coords)
+        # 1) 선반 이동 (적재 대상)
+        loading_target = random.choice(shelf_coords)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
-        yield from move_to(env, agv_id, agv_positions, logs, unloading_target)
-
-        # 10초 대기(적재재)
+        yield from move_to(env, agv_id, agv_positions, logs, loading_target)
+        
+        # 10초 대기 (적재)
         with data_lock:
-            shared_data["statuses"][key] = "UNLOADING"
+            shared_data["statuses"][key] = "LOADING"  # 적재 단계 표시
             shared_data["directions"][key] = ""
         yield env.timeout(10)
-        # 적재 완료 시간 기록
+        # 적재 완료 시점 기록
         loading_complete_time = env.now
 
-        # 2) 출구 이동
+        # 2) 출구 이동 (하역 대상)
         exit_target = random.choice(exit_coords)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
         
-
-        # 5초 대기
+        # 5초 대기 (하역)
         yield env.timeout(5)
         # 하역 완료 시점 기록
         unloading_complete_time = env.now
-
-        # 효율성 계산
+        
+        # 사이클 효율성 계산: 적재 완료 후 하역 완료까지 걸린 시간
         cycle_efficiency = unloading_complete_time - loading_complete_time
 
-        # 효율성 계산 : 적재 완료 후 하역 완료까지 걸린 시간
+        # 지수이동평균 방식으로 AGV별 효율성 업데이트
         with data_lock:
-            shared_data["efficiency_sum"][key] += cycle_efficiency
+            alpha = 0.5  # 최신 사이클에 부여할 가중치 (0~1)
+            # 첫 사이클이면 그대로 저장, 이후엔 EMA 방식 업데이트
+            if shared_data["order_completed"][key] == 0:
+                shared_data["efficiency"][key] = cycle_efficiency
+            else:
+                shared_data["efficiency"][key] = alpha * cycle_efficiency + (1 - alpha) * shared_data["efficiency"][key]
             shared_data["order_completed"][key] += 1
-            shared_data["efficiency"][key] = shared_data["efficiency_sum"][key] / shared_data["order_completed"][key]
+
 
 
 def move_to(env, agv_id, agv_positions, logs, target):
