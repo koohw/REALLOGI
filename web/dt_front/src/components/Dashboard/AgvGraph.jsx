@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import {
   LineChart,
   Line,
@@ -9,10 +10,16 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import {
+  updateAGVData,
+  updateStatusCounts,
+  updateOrderTotal,
+} from "../../features/agvSlice";
 
 const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
-  const [agvData, setAgvData] = useState([]);
-  const [timeLabels, setTimeLabels] = useState([]);
+  const dispatch = useDispatch();
+  const agvData = useSelector((state) => state.agv.agvData);
+  const lastEfficiency = useSelector((state) => state.agv.lastEfficiency);
 
   useEffect(() => {
     const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
@@ -20,63 +27,41 @@ const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      // Get current timestamp
-      const now = new Date();
-      const timeLabel = `${String(now.getHours()).padStart(2, "0")}:${String(
-        now.getMinutes()
-      ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-
-      // Calculate status counts
+      // Update status counts
       const statusCounts = {
         operating: data.agv_number,
         waiting: data.agvs.filter((agv) => agv.state === "STOPPED").length,
-        charging: data.agvs.filter((agv) => agv.state === "UNLOADING").length,
+        charging: data.agvs.filter((agv) => agv.state === "LOADING").length,
         error: data.agvs.filter((agv) => agv.issue !== "").length,
       };
+      dispatch(updateStatusCounts(statusCounts));
+      if (onDataUpdate) {
+        onDataUpdate(statusCounts);
+      }
 
-      // Calculate total order success
+      // Update order total
       const orderTotal = Object.values(data.order_success).reduce(
         (sum, count) => sum + count,
         0
       );
-      const productCount = {
-        total: orderTotal,
-      };
-
-      // Pass data to parent components
-      if (onDataUpdate) {
-        onDataUpdate(statusCounts);
-      }
+      dispatch(updateOrderTotal(orderTotal));
       if (onOrderUpdate) {
-        onOrderUpdate({ productCount });
+        onOrderUpdate({ productCount: { total: orderTotal } });
       }
 
-      // Calculate efficiency metrics for graph
-      const runningAgvs = data.agvs.filter(
-        (agv) => agv.state === "RUNNING"
-      ).length;
-      const totalActiveAgvs = data.agvs.filter(
-        (agv) => agv.state !== ""
-      ).length;
-      const efficiency =
-        totalActiveAgvs > 0 ? (runningAgvs / totalActiveAgvs) * 100 : 0;
+      // Update efficiency data
+      const currentEfficiency = data.overall_efficiency;
+      if (lastEfficiency === null || currentEfficiency !== lastEfficiency) {
+        const timestamp = new Date(data.overall_efficiency_history[0][0]);
+        const timeLabel = `${String(timestamp.getHours()).padStart(
+          2,
+          "0"
+        )}:${String(timestamp.getMinutes()).padStart(2, "0")}:${String(
+          timestamp.getSeconds()
+        ).padStart(2, "0")}`;
 
-      // Update data (keep last 10 points)
-      setTimeLabels((prev) => {
-        const newLabels = [...prev, timeLabel];
-        return newLabels.slice(-10);
-      });
-
-      setAgvData((prev) => {
-        const newData = [
-          ...prev,
-          {
-            time: timeLabel,
-            efficiency: efficiency,
-          },
-        ];
-        return newData.slice(-10);
-      });
+        dispatch(updateAGVData({ timeLabel, efficiency: currentEfficiency }));
+      }
     };
 
     eventSource.onerror = (error) => {
@@ -87,15 +72,17 @@ const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
     return () => {
       eventSource.close();
     };
-  }, [onDataUpdate, onOrderUpdate]);
+  }, [dispatch, lastEfficiency, onDataUpdate, onOrderUpdate]);
 
   return (
-    <div className="w-full bg-white rounded-lg p-4">
-      <h2 className="text-lg font-semibold mb-4">실시간 AGV 효율성 그래프</h2>
+    <div className="w-full bg-[#0D1B2A] rounded-lg shadow-lg p-4 border border-white/10">
+      <h2 className="text-lg font-semibold mb-4 text-white">
+        실시간 AGV 효율성 그래프
+      </h2>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={agvData}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
             <XAxis
               dataKey="time"
               padding={{ left: 30, right: 30 }}
@@ -103,24 +90,40 @@ const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
               textAnchor="end"
               height={60}
               interval={0}
+              tick={{ fill: "#fff" }}
             />
             <YAxis
-              domain={[0, 100]}
+              domain={[0, 30]}
+              ticks={[0, 5, 10, 15, 20, 25, 30]}
+              tick={{ fill: "#fff" }}
               label={{
                 value: "효율성 (%)",
                 angle: -90,
                 position: "insideLeft",
+                fill: "#fff",
+                style: { textAnchor: "middle" },
               }}
             />
-            <Tooltip />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#11263f",
+                border: "none",
+                color: "white",
+                borderRadius: "4px",
+              }}
+              labelStyle={{ color: "white" }}
+              itemStyle={{ color: "white" }}
+              formatter={(value) => `${value.toFixed(2)}%`}
+            />
             <Legend />
             <Line
               type="monotone"
               dataKey="efficiency"
               name="AGV 효율성"
-              stroke="#2563eb"
+              stroke="#fff"
               strokeWidth={2}
-              dot={false}
+              dot={true}
+              activeDot={{ r: 6 }}
             />
           </LineChart>
         </ResponsiveContainer>
