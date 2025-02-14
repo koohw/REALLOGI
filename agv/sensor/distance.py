@@ -1,30 +1,70 @@
-# Jetson Nano Orin용 MPU6050 및 MQTT 센서 데이터 전송 코드
-# 주의: 사용중인 I²C 버스 번호가 다를 수 있으니, 센서가 연결된 I²C 버스를 /dev/i2c-*에서 확인 후 수정하세요.
-#
-# 만약 smbus 라이브러리가 없다면 smbus2를 설치한 후 아래와 같이 import 구문을 변경하세요.
-#   pip install smbus2
-# 그리고 아래 import 구문을:
-from smbus2 import SMBus
-# 로 변경한 후, 코드 내 SMBus(7) 호출도 동일하게 사용하면 됩니다.
-
-import time
-import math
-import json
+import cv2
 import numpy as np
+import time
+from PCA9685 import PCA9685
 import paho.mqtt.client as mqtt
+import json
+import smbus
 
-# Jetson 환경에서 I2C 통신을 위해 smbus2를 사용 (만약 smbus가 설치되어 있다면 아래와 같이 변경 가능)
-try:
-    import smbus
-except ImportError:
-    from smbus2 import SMBus
+# --- 모터 제어 클래스 ---
+class MotorDriver:
+    def __init__(self):
+        self.PWMA = 0   # 왼쪽 모터 속도(PWM) 핀
+        self.AIN1 = 1   # 왼쪽 모터 방향 제어 핀 1
+        self.AIN2 = 2   # 왼쪽 모터 방향 제어 핀 2
+        self.PWMB = 5   # 오른쪽 모터 속도(PWM) 핀
+        self.BIN1 = 3   # 오른쪽 모터 방향 제어 핀 1
+        self.BIN2 = 4   # 오른쪽 모터 방향 제어 핀 2
+        self.pwm = PCA9685(0x40, debug=True)
+        self.pwm.setPWMFreq(50)
 
-# MQTT 설정
-BROKER = "broker.hivemq.com"
-PORT = 1883
-TOPIC_AGV_TO_SIMPY = "agv/status"
-TOPIC_SIMPY_TO_AGV = "simpy/commands"
+    def MotorRun(self, motor, direction, speed):
+        if speed > 100:
+            speed = 100
+        if motor == 0:  # 왼쪽 모터
+            self.pwm.setDutycycle(self.PWMA, int(speed))
+            if direction == 'forward':
+                self.pwm.setLevel(self.AIN1, 0)
+                self.pwm.setLevel(self.AIN2, 1)
+            else:
+                self.pwm.setLevel(self.AIN1, 1)
+                self.pwm.setLevel(self.AIN2, 0)
+        else:  # 오른쪽 모터
+            self.pwm.setDutycycle(self.PWMB, int(speed))
+            if direction == 'forward':
+                self.pwm.setLevel(self.BIN1, 0)
+                self.pwm.setLevel(self.BIN2, 1)
+            else:
+                self.pwm.setLevel(self.BIN1, 1)
+                self.pwm.setLevel(self.BIN2, 0)
 
+    def MotorStop(self, motor=None):
+        # motor가 None이면 모든 모터 정지
+        if motor is None:
+            self.pwm.setDutycycle(self.PWMA, 0)
+            self.pwm.setDutycycle(self.PWMB, 0)
+        elif motor == 0:
+            self.pwm.setDutycycle(self.PWMA, 0)
+        else:
+            self.pwm.setDutycycle(self.PWMB, 0)
+
+# --- PID 컨트롤러 클래스 ---
+class PID:
+    def __init__(self, kp, ki, kd):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.prev_error = 0
+        self.integral = 0
+
+    def update(self, error, dt):
+        self.integral += error * dt
+        derivative = (error - self.prev_error) / dt if dt > 0 else 0
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        self.prev_error = error
+        return output
+   
+# 가속도계 센서 보정을 위한 칼만 필터
 class KalmanFilter:
     def __init__(self, Q=0.001, R=0.1):
         self.Q = Q
@@ -44,6 +84,7 @@ class KalmanFilter:
         self.P = (1 - K) * self.P
         return self.velocity
 
+# 가속도계 센서서
 class MPU6050:
     def __init__(self, bus, address=0x68):
         self.bus = bus
@@ -57,23 +98,18 @@ class MPU6050:
         # MPU6050 초기화: 전원 관리 및 감도 설정
         self.bus.write_byte_data(self.address, 0x6B, 0x00)  # 전원 관리 1 레지스터: 슬립 모드 해제
         self.bus.write_byte_data(self.address, 0x1C, 0x00)  # 가속도 감도 설정
-        self.bus.write_byte_data(self.address, 0x1B, 0x00)  # 자이로 감도 설정
         time.sleep(0.1)
 
     def calibrate_sensor(self):
         accel_sum = [0, 0]
-        gyro_sum = 0
         samples = 100
         for _ in range(samples):
             accel = self.get_raw_accel_data()
-            gyro = self.get_raw_gyro_data()
             accel_sum[0] += accel['x']
             accel_sum[1] += accel['y']
-            gyro_sum += gyro['z']
             time.sleep(0.01)
         self.accel_offset_x = accel_sum[0] / samples
         self.accel_offset_y = accel_sum[1] / samples
-        self.gyro_offset_z = gyro_sum / samples
 
     def read_i2c_word(self, reg):
         high = self.bus.read_byte_data(self.address, reg)
@@ -93,58 +129,119 @@ class MPU6050:
         # 센서 장착 방향에 따른 좌표 변환 (내부: x, y → 출력: 앞쪽(-y), 뒤쪽(+y), 오른쪽(+x), 왼쪽(-x))
         return {'x': y, 'y': -x}
 
-    def get_raw_gyro_data(self):
-        z = self.read_i2c_word(0x47)
-        return {'z': z}
+# --- 빨간색 라인 검출 함수 ---
 
-    def get_gyro_data(self):
-        raw = self.get_raw_gyro_data()
-        z = (raw['z'] - self.gyro_offset_z) / self.gyro_scale
-        return {'z': -z}
+# 빨간색 범위 정의
+lower_red1 = np.array([0, 100, 100])
+upper_red1 = np.array([10, 255, 255])
+lower_red2 = np.array([160, 100, 100])
+upper_red2 = np.array([180, 255, 255])
 
-def on_connect(client, userdata, flags, rc):
-    client.subscribe(TOPIC_SIMPY_TO_AGV)
+def detect_red_line(frame):
+    blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
-def on_message(client, userdata, msg):
-    command = json.loads(msg.payload)
-    if command.get('command') == 'STOP':
-        print("AGV 정지 명령 수신")
-    elif command.get('command') == 'RESUME':
-        print("AGV 재시작 명령 수신")
+    # 빨간색 마스크 생성
+    mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+    mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+    mask = cv2.bitwise_or(mask1, mask2)
 
-def main():
-    # MQTT 클라이언트 설정
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.connect(BROKER, PORT, 60)
-    client.loop_start()
+    # 모폴로지 연산으로 노이즈 제거
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-    # Jetson Nano Orin에서는 연결된 I2C 버스 번호가 다를 수 있으니 확인 후 수정하세요.
-    # 예시에서는 /dev/i2c-7에 연결된 것으로 가정합니다.
-    bus = smbus.SMBus(7)
-    mpu = MPU6050(bus)
-    kalman_x = KalmanFilter(Q=0.001, R=0.1)
-    kalman_y = KalmanFilter(Q=0.001, R=0.1)
+    # 컨투어 검출
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # 유효한 컨투어 필터링
+    valid_contours = [c for c in contours if cv2.contourArea(c) > 100]  # 노이즈 제거
    
-    # 내부 좌표계: index0 -> x, index1 -> y
-    # 문제 설명에 따라 출발지는 (8, 0)로 설정 (출력 순서는 (y, x))
-    position = np.array([0.0, 8.0])
-    velocity = np.array([0.0, 0.0])
-   
-    # 시뮬레이션 상 각도 (자이로 데이터로 갱신)
-    angle = 0.0  
+    # 종횡비(Aspect Ratio)를 이용하여 얇은 선 찾기
+    filtered_contours = []
+    for c in valid_contours:
+        x, y, w, h = cv2.boundingRect(c)  # 바운딩 박스 구하기
+        aspect_ratio = w / float(h)  # 종횡비 계산
 
-    # 간단한 노이즈 필터링 계수 및 중력 상수 (m/s^2)
-    alpha = 0.1
-    gravity = 9.81
+        if 0.1 < aspect_ratio < 0.5:  # 길고 얇은 선인지 확인
+            filtered_contours.append(c)
+
+    # 가장 적절한 컨투어 선택 (면적이 가장 작은 것)
+    if filtered_contours:
+        selected_contour = min(filtered_contours, key=cv2.contourArea)
+        M = cv2.moments(selected_contour)
+
+        if M["m00"] != 0:
+            line_x = int(M["m10"] / M["m00"])
+            line_y = int(M["m01"] / M["m00"])
+            return True, (line_x, line_y), mask
+
+    return False, None, mask
+
+# --- QR 코드 검출 함수 ---
+def detect_qr_code(frame):
+    qr_detector = cv2.QRCodeDetector()
+    data, points, _ = qr_detector.detectAndDecode(frame)
+    if points is not None and data:
+        pts = points[0]
+        qr_x = int(np.mean(pts[:, 0]))
+        qr_y = int(np.mean(pts[:, 1]))
+        return True, (qr_x, qr_y), data
+    return False, None, None
+
+# --- MQTT 클라이언트 초기화 ---
+BROKER = "broker.hivemq.com"
+PORT = 1883
+MQTT_TOPIC = "agv/qr_info"
+TOPIC_AGV_TO_SIMPY = "agv/status"
+TOPIC_SIMPY_TO_AGV = "simpy/commands"
+
+mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311)
+mqtt_client.connect(BROKER, PORT, 60)
+mqtt_client.loop_start()
+
+def line_following_with_qr():
+    motor = MotorDriver()
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_BRIGHTNESS, 0.1)
+
+    if not cap.isOpened():
+        print("카메라를 열 수 없습니다.")
+        return
+
+    ret, frame = cap.read()
+    if not ret:
+        print("프레임을 읽을 수 없습니다.")
+        return
+
+    frame_height, frame_width = frame.shape[:2]
+    frame_center = frame_width // 2
+
+    # ✅ I2C 버스 설정 (MPU6050 한 번만 초기화)
+    try:
+        bus = smbus.SMBus(7)  # Jetson Orin에서는 i2c-1 또는 i2c-7을 사용할 수도 있음
+        mpu = MPU6050(bus)  # MPU6050 센서 객체 생성
+    except Exception as e:
+        print("MPU6050 초기화 실패:", e)
+        return
+
+    # ✅ PID 및 속도 설정
+    pid = PID(kp=0.06, ki=0.0, kd=0.03)
+    original_speed = 40  # 직진 시 기본 속도
+    current_speed = original_speed
     prev_time = time.time()
+    prev_correction = 0
+    position_x = 0.0  # 이동 거리 (cm)
+    velocity_x = 0.0  # 속도 (cm/s)
 
-    # =============================
-    # [추가] 이동거리 계산을 위한 변수 초기화 (단위: m)
-    distance_traveled = 0.0  
-    prev_position = position.copy()
-    # =============================
+    # ✅ 상태 정의
+    STATE_WAIT_START = 0
+    STATE_STRAIGHT = 1
+    STATE_QR_FIND = 2
+    STATE_STOP = 3
+    state = STATE_WAIT_START
 
     try:
         while True:
@@ -152,69 +249,99 @@ def main():
             dt = current_time - prev_time
             prev_time = current_time
 
-            # 센서값 획득
-            accel = mpu.get_accel_data()    # 단위: g (보정 후)
-            gyro = mpu.get_gyro_data()      # 단위: deg/s (센서에 따라 다름)
+            ret, frame = cap.read()
+            if not ret:
+                print("프레임 읽기 실패")
+                break
 
-            # 자이로 데이터를 이용해 회전각(heading) 갱신
-            angle += gyro['z'] * dt
+            # ✅ 라인 트래킹 유지 (추가)
+            detected, centroid, mask = detect_red_line(frame)
+            if detected and centroid is not None:
+                cx, cy = centroid
+                error = cx - frame_center
+                correction = pid.update(error, dt) * 0.5  # 보정값을 작게 적용
+                
+                # 보정값 제한
+                max_delta = 2
+                delta = correction - prev_correction
+                if abs(delta) > max_delta:
+                    correction = prev_correction + max_delta * np.sign(delta)
+                prev_correction = correction
+                
+                # 속도 계산 및 적용
+                min_speed = 4
+                left_speed = max(min_speed, min(100, current_speed + correction))
+                right_speed = max(min_speed, min(100, current_speed - correction))
+                
+                motor.MotorRun(0, 'forward', left_speed)
+                motor.MotorRun(1, 'forward', right_speed)
 
-            # 간단한 low-pass 필터 적용 (필요시 추가 오프셋 적용 가능)
-            accel_x = alpha * accel['x']
-            accel_y = alpha * accel['y']
+            else:
+                prev_correction *= 0.5
+                left_speed = max(4, current_speed + prev_correction)
+                right_speed = max(4, current_speed - prev_correction)
+                motor.MotorRun(0, 'forward', left_speed)
+                motor.MotorRun(1, 'forward', right_speed)
 
-            # 가속도 값을 월드 좌표계로 변환 (회전 보정)
-            accel_world_x = accel_x * math.cos(angle) - accel_y * math.sin(angle)
-            accel_world_y = accel_x * math.sin(angle) + accel_y * math.cos(angle)
+            # ✅ 상태에 따른 동작
+            if state == STATE_WAIT_START:
+                qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
+                if qr_detected:
+                    print("출발지 QR 코드 감지 – 직진 주행 시작")
+                    state = STATE_STRAIGHT
+                motor.MotorStop()
 
-            # 가속도를 m/s² 단위로 변환 (g → m/s²)
-            accel_world_x *= gravity
-            accel_world_y *= gravity
+            elif state == STATE_STRAIGHT:
+                motor.MotorRun(0, 'forward', original_speed)
+                motor.MotorRun(1, 'forward', original_speed)
 
-            # 원시 속도 추정 (적분)
-            raw_vel_x = velocity[0] + accel_world_x * dt
-            raw_vel_y = velocity[1] + accel_world_y * dt
+                # ✅ 이동 거리 계산 (I2C 센서에서 값 읽기)
+                accel_data = mpu.get_accel_data()
+                accel_x = accel_data['x'] * 9.81  # m/s² 단위 변환
+                new_velocity_x = velocity_x + accel_x * dt
+                position_x += (velocity_x + new_velocity_x) / 2 * dt  # 평균 속도로 적분
+                velocity_x = new_velocity_x  # 속도 갱신
 
-            # 칼만 필터로 속도 보정 (m/s 단위)
-            velocity[0] = kalman_x.update(raw_vel_x, dt)
-            velocity[1] = kalman_y.update(raw_vel_y, dt)
+                position = abs(position_x) * 10
 
-            # 속도 적분으로 위치 추정 (단위: m)
-            position[0] += velocity[0] * dt
-            position[1] += velocity[1] * dt
+                cv2.putText(frame, f"Distance: {position:.1f} cm", (10,60),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,0), 2)
 
-            # 미세한 가속도에서는 마찰 효과로 속도 서서히 감소
-            if abs(accel_world_x) < 0.02 and abs(accel_world_y) < 0.02:
-                velocity *= 0.95
+                if position >= 50:  # 100cm 도달하면 속도 줄이기
+                    print("100cm 이동 완료 – QR 찾기 모드로 전환")
+                    state = STATE_QR_FIND
 
-            # 속도를 cm/s 단위로 변환 (1 m/s = 100 cm/s)
-            speed_cm_s = math.sqrt(velocity[0]**2 + velocity[1]**2) * 100
+            elif state == STATE_QR_FIND:
+                current_speed = 8
+                qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
 
-            # =============================
-            # [추가] 이동거리 계산: 이전 위치와 현재 위치 사이의 이동 거리를 누적 (단위: m)
-            delta = np.linalg.norm(position - prev_position)
-            distance_traveled += delta
-            prev_position = position.copy()
-            # =============================
+                if qr_detected:
+                    print("QR 코드 감지 – 정지 및 명령 대기")
+                    motor.MotorStop()
+                    state = STATE_STOP
+                    qr_info = {"position": qr_centroid, "data": qr_data}
+                    mqtt_client.publish(MQTT_TOPIC, json.dumps(qr_info))
+                    time.sleep(1)
+                    continue
 
-            # MQTT 전송 데이터 구성 (출력 순서: y, x)
-            # 이동거리는 cm 단위 (1 m = 100 cm)
-            position_data = {
-                "y": round(float(position[1]), 2),
-                "x": round(float(position[0]), 2),
-                "speed": round(speed_cm_s, 2),
-                "distance": round(distance_traveled * 100, 2)
-            }
+            elif state == STATE_STOP:
+                motor.MotorStop()
+                print("정지 상태: 명령을 입력하세요 (RESUME 입력 시 재시작):")
+                cmd = input()
+                if cmd.strip().upper() == "RESUME":
+                    print("재시작 명령 수신 – 직진 모드로 전환")
+                    state = STATE_STRAIGHT
 
-            client.publish(TOPIC_AGV_TO_SIMPY, json.dumps(position_data))
-            print(f"현재 위치: y={position_data['y']}, x={position_data['x']}, 속도={position_data['speed']} cm/s, 이동거리={position_data['distance']} cm")
-
-            time.sleep(1)
+            cv2.imshow("Frame", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     except KeyboardInterrupt:
-        client.loop_stop()
-        client.disconnect()
-        print("프로그램 종료")
+        print("Ctrl+C 입력, 모터를 정지합니다.")
+    finally:
+        motor.MotorStop()
+        cap.release()
+        cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    line_following_with_qr()
