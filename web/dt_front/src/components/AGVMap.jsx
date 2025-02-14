@@ -7,12 +7,13 @@ import {
   Circle,
 } from "lucide-react";
 import { agvService } from "../api/agvService";
-import AGVControlPanel from "./AGVControlPanel";
 import TileMap from "./TileMap";
+import AGVControlPanel from "./AGVControlPanel";
+import AnalyticsView from "./AnalyticsView";
 
-const AGVMap = ({ onStateChange }) => {
-  // Add onStateChange prop here
+const AGVMap = ({ onStateChange, showControls }) => {
   const [agvData, setAgvData] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
   const [lastUpdate, setLastUpdate] = useState("");
   const agvPositions = useRef(new Map());
   const cellSize = 25;
@@ -102,7 +103,7 @@ const AGVMap = ({ onStateChange }) => {
         });
 
         setAgvData(data.agvs);
-        // Call onStateChange prop with updated AGV data
+        setAnalyticsData(data);
         if (onStateChange) {
           onStateChange(data.agvs);
         }
@@ -113,8 +114,7 @@ const AGVMap = ({ onStateChange }) => {
     return () => {
       eventSource.close();
     };
-  }, [onStateChange]); // Add onStateChange to dependency array
-
+  }, [onStateChange]);
   // Rest of your component code...
   const handleAgvClick = (agv, e) => {
     e.stopPropagation();
@@ -275,10 +275,14 @@ const AGVMap = ({ onStateChange }) => {
       </div>
 
       <div className="w-96 flex-shrink-0">
-        <AGVControlPanel
-          selectedAgvs={selectedAgvs}
-          onActionComplete={() => setSelectedAgvs([])}
-        />
+        {showControls ? (
+          <AGVControlPanel
+            selectedAgvs={selectedAgvs}
+            onActionComplete={() => setSelectedAgvs([])}
+          />
+        ) : (
+          <AnalyticsView agvData={analyticsData} />
+        )}
       </div>
     </div>
   );
