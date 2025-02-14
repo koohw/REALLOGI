@@ -3,9 +3,9 @@ import Sidebar from "../components/Sidebar";
 
 function AgvRegisterPage() {
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-[#0D1B2A]">
       {/* 좌측 사이드바 영역 */}
-      <div className="w-64 border-r border-gray-200">
+      <div className="w-64 border-r border-gray-700">
         <Sidebar />
       </div>
 
