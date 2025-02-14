@@ -10,6 +10,8 @@ import { agvService } from "../api/agvService";
 import TileMap from "./TileMap";
 import AGVControlPanel from "./AGVControlPanel";
 import AnalyticsView from "./AnalyticsView";
+import { useDispatch } from "react-redux";
+import { updateAGVData, updateOrderTotal } from "../features/agvSlice"; // path might need adjustment
 
 const AGVMap = ({ onStateChange, showControls }) => {
   const [agvData, setAgvData] = useState([]);
@@ -23,6 +25,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedAgvs, setSelectedAgvs] = useState([]);
+  const dispatch = useDispatch();
 
   const mapData = [
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
@@ -40,19 +43,21 @@ const AGVMap = ({ onStateChange, showControls }) => {
   ];
 
   useEffect(() => {
-    const interpolatePosition = (startX, startY, endX, endY, progress) => {
-      return {
-        x: startX + (endX - startX) * progress,
-        y: startY + (endY - startY) * progress,
-      };
-    };
+    let isSubscribed = true;
+
+    const interpolatePosition = (startX, startY, endX, endY, progress) => ({
+      x: startX + (endX - startX) * progress,
+      y: startY + (endY - startY) * progress,
+    });
 
     const updateAGVPosition = (agvId, startX, startY, endX, endY, duration) => {
       const startTime = performance.now();
+
       const animate = (currentTime) => {
+        if (!isSubscribed) return;
+
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
         const { x, y } = interpolatePosition(
           startX,
           startY,
@@ -60,6 +65,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
           endY,
           progress
         );
+
         const agvElement = document.getElementById(`agv-${agvId}`);
         if (agvElement) {
           agvElement.style.transform = `translate(${x * cellSize}px, ${
@@ -76,45 +82,83 @@ const AGVMap = ({ onStateChange, showControls }) => {
     };
 
     const eventSource = agvService.getAgvStream();
+
     eventSource.onmessage = (event) => {
+      if (!isSubscribed) return;
+
       const data = JSON.parse(event.data);
+
       if (data.success && data.agvs) {
+        // Update AGV positions and animations
         data.agvs.forEach((newAgv) => {
           const currentPos = agvPositions.current.get(newAgv.agv_id);
           if (currentPos) {
-            if (
-              currentPos.x !== newAgv.location_y ||
-              currentPos.y !== newAgv.location_x
-            ) {
+            const newX = newAgv.location_y;
+            const newY = newAgv.location_x;
+
+            if (currentPos.x !== newX || currentPos.y !== newY) {
               updateAGVPosition(
                 newAgv.agv_id,
                 currentPos.x,
                 currentPos.y,
-                newAgv.location_y,
-                newAgv.location_x,
+                newX,
+                newY,
                 1000
               );
             }
           }
+
           agvPositions.current.set(newAgv.agv_id, {
             x: newAgv.location_y,
             y: newAgv.location_x,
           });
         });
 
+        // Update local state
         setAgvData(data.agvs);
-        setAnalyticsData(data);
+        setLastUpdate(data.agvs[0]?.realtime || "");
+
+        // Update Redux store
+        const timestamp = new Date(data.overall_efficiency_history[0][0]);
+        const timeLabel = `${String(timestamp.getHours()).padStart(
+          2,
+          "0"
+        )}:${String(timestamp.getMinutes()).padStart(2, "0")}:${String(
+          timestamp.getSeconds()
+        ).padStart(2, "0")}`;
+
+        dispatch(
+          updateAGVData({
+            time: timeLabel,
+            efficiency: data.overall_efficiency,
+          })
+        );
+
+        const orderTotal = Object.values(data.order_success).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        dispatch(updateOrderTotal(orderTotal));
+
+        // Call onStateChange if provided
         if (onStateChange) {
           onStateChange(data.agvs);
         }
-        setLastUpdate(data.agvs[0]?.realtime || "");
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:", error);
+      if (isSubscribed) {
+        eventSource.close();
       }
     };
 
     return () => {
+      isSubscribed = false;
       eventSource.close();
     };
-  }, [onStateChange]);
+  }, [dispatch, onStateChange]);
   // Rest of your component code...
   const handleAgvClick = (agv, e) => {
     e.stopPropagation();

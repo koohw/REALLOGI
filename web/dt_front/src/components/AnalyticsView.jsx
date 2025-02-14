@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
+import { useSelector } from "react-redux";
 import {
   LineChart,
   Line,
@@ -12,67 +13,63 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const AnalyticsView = ({ agvData }) => {
-  const [efficiencyData, setEfficiencyData] = useState([]);
-  const [quantityData, setQuantityData] = useState([]);
+const AnalyticsView = () => {
+  const efficiencyData = useSelector((state) => state.agv.agvData);
+  const orderSuccess = useSelector((state) => state.agv.orderTotal);
   const totalCapacity = 3000;
-  const [lastEfficiency, setLastEfficiency] = useState(null);
 
-  useEffect(() => {
-    if (!agvData) return;
+  // Optimize efficiency data to only include points where values change
+  const optimizedEfficiencyData = useMemo(() => {
+    if (!efficiencyData || efficiencyData.length === 0) return [];
 
-    // Update efficiency data only when it changes
-    const currentEfficiency = agvData.overall_efficiency;
-    if (lastEfficiency === null || currentEfficiency !== lastEfficiency) {
-      const timestamp = new Date(agvData.overall_efficiency_history[0][0]);
-      const timeLabel = `${String(timestamp.getHours()).padStart(
-        2,
-        "0"
-      )}:${String(timestamp.getMinutes()).padStart(2, "0")}:${String(
-        timestamp.getSeconds()
-      ).padStart(2, "0")}`;
+    return efficiencyData.reduce((acc, current, index) => {
+      // Always include the first point
+      if (index === 0) {
+        return [current];
+      }
 
-      setEfficiencyData((prev) => {
-        const newData = [
-          ...prev.slice(-9),
-          { time: timeLabel, efficiency: currentEfficiency },
-        ];
-        return newData;
-      });
-      setLastEfficiency(currentEfficiency);
-    }
+      // Compare with the last point in our accumulated array
+      const lastPoint = acc[acc.length - 1];
 
-    // Calculate total completed orders
-    const completedOrders = Object.values(agvData.order_success).reduce(
-      (sum, count) => sum + count,
-      0
-    );
-    const remainingOrders = totalCapacity - completedOrders;
+      // Include point if efficiency value is different from the last point
+      if (Math.abs(lastPoint.efficiency - current.efficiency) > 0.01) {
+        return [...acc, current];
+      }
 
-    setQuantityData([
-      {
-        name: "잔여",
-        value: remainingOrders,
-        remaining: remainingOrders,
-        completed: 0,
-      },
-      {
-        name: "완료",
-        value: completedOrders,
-        remaining: 0,
-        completed: completedOrders,
-      },
-    ]);
-  }, [agvData, lastEfficiency]);
+      // If it's the last point, always include it to ensure we have the latest state
+      if (
+        index === efficiencyData.length - 1 &&
+        lastPoint.time !== current.time
+      ) {
+        return [...acc, current];
+      }
+
+      return acc;
+    }, []);
+  }, [efficiencyData]);
+
+  // Calculate quantity data
+  const quantityData = [
+    {
+      name: "잔여",
+      remaining: totalCapacity - orderSuccess,
+      completed: 0,
+    },
+    {
+      name: "완료",
+      remaining: 0,
+      completed: orderSuccess,
+    },
+  ];
 
   return (
     <div className="space-y-6 p-4 bg-gray-900 rounded-lg">
       {/* Efficiency Graph */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h3 className="text-white text-lg mb-4">실시간 AGV 효율성</h3>
-        <div className="h-64">
+        <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={efficiencyData}>
+            <LineChart data={optimizedEfficiencyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis
                 dataKey="time"
@@ -80,6 +77,7 @@ const AnalyticsView = ({ agvData }) => {
                 angle={-45}
                 textAnchor="end"
                 height={60}
+                interval={0}
               />
               <YAxis
                 domain={[0, 15]}
@@ -103,6 +101,7 @@ const AnalyticsView = ({ agvData }) => {
                 stroke="#60A5FA"
                 strokeWidth={2}
                 dot={true}
+                activeDot={{ r: 6 }}
               />
             </LineChart>
           </ResponsiveContainer>
