@@ -61,7 +61,7 @@ function MonitorPage() {
         </div>
 
         <div className="flex-1 bg-[#11263f]">
-          <div className="flex justify-between items-center px-6 py-4 border-b border-gray-700 w-full h-4/5">
+          <div className="flex justify-between items-center px-6 py-4 border-b border-gray-700 w-full h-full">
             <AGVMap
               onStateChange={handleAgvStateChange}
               showControls={showControls}
