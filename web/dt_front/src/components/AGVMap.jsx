@@ -5,15 +5,18 @@ import {
   ArrowLeft,
   ArrowRight,
   Circle,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { agvService } from "../api/agvService";
 import TileMap from "./TileMap";
 import AGVControlPanel from "./AGVControlPanel";
 import AnalyticsView from "./AnalyticsView";
 import { useDispatch } from "react-redux";
-import { updateAGVData, updateOrderTotal } from "../features/agvSlice"; // path might need adjustment
-
+import { updateAGVData, updateOrderTotal } from "../features/agvSlice";
 const AGVMap = ({ onStateChange, showControls }) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapContainerRef = useRef(null);
   const [agvData, setAgvData] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [lastUpdate, setLastUpdate] = useState("");
@@ -41,6 +44,25 @@ const AGVMap = ({ onStateChange, showControls }) => {
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
   ];
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mapContainerRef.current.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -246,9 +268,26 @@ const AGVMap = ({ onStateChange, showControls }) => {
   };
 
   return (
-    <div className="flex gap-4 h-full w-full">
-      <div className="flex-1 flex flex-col">
+    <div
+      className={`flex gap-4 ${
+        isFullscreen ? "h-screen w-screen p-4 bg-[#11263f]" : "h-full w-full"
+      }`}
+    >
+      <div className="flex-1 flex flex-col relative">
+        <button
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-4 z-10 p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white transition-colors"
+          title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-5 h-5" />
+          ) : (
+            <Maximize2 className="w-5 h-5" />
+          )}
+        </button>
+
         <div
+          ref={mapContainerRef}
           className="relative overflow-hidden border border-gray-700 rounded-lg shadow-lg flex-1"
           onClick={handleMapClick}
         >
@@ -267,6 +306,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
           >
             <TileMap mapData={mapData} cellSize={cellSize} />
 
+            {/* AGV markers */}
             {agvData.map((agv) => {
               const initialPos = agvPositions.current.get(agv.agv_id) || {
                 x: agv.location_y,
@@ -318,16 +358,18 @@ const AGVMap = ({ onStateChange, showControls }) => {
         </div>
       </div>
 
-      <div className="w-96 flex-shrink-0">
-        {showControls ? (
-          <AGVControlPanel
-            selectedAgvs={selectedAgvs}
-            onActionComplete={() => setSelectedAgvs([])}
-          />
-        ) : (
-          <AnalyticsView agvData={analyticsData} />
-        )}
-      </div>
+      {!isFullscreen && (
+        <div className="w-96 flex-shrink-0">
+          {showControls ? (
+            <AGVControlPanel
+              selectedAgvs={selectedAgvs}
+              onActionComplete={() => setSelectedAgvs([])}
+            />
+          ) : (
+            <AnalyticsView agvData={analyticsData} />
+          )}
+        </div>
+      )}
     </div>
   );
 };
