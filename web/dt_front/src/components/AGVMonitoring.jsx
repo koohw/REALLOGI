@@ -11,15 +11,15 @@ const Modal = ({ isOpen, onClose, children, title }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 relative">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+      <div className="bg-[#11263f] rounded-lg p-6 max-w-lg w-full mx-4 relative border border-gray-700">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-200"
         >
           ✕
         </button>
-        <h2 className="text-xl font-bold mb-4">{title}</h2>
+        <h2 className="text-xl font-bold mb-4 text-gray-200">{title}</h2>
         {children}
       </div>
     </div>
@@ -79,7 +79,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
       case 0:
         return {
           ...baseStyle,
-          backgroundImage: "white",
+          backgroundColor: "#11263f",
         };
       case 1:
         return {
@@ -88,11 +88,11 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         };
       case 2:
         return {
-          backgroundColor: "rgb(224 242 254)", // 기존 하늘색 배경 유지
+          backgroundColor: "#0D1B2A",
         };
       default:
         return {
-          backgroundColor: "white",
+          backgroundColor: "#11263f",
         };
     }
   };
@@ -269,24 +269,24 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   }, [agvData, CELL_SIZE]);
 
   return (
-    <div className="p-3 border rounded-lg bg-white shadow-lg">
-      {/* Compact Controls Row */}
+    <div className="p-3 border border-gray-700 rounded-lg bg-[#11263f] shadow-lg">
+      {/* Controls Row */}
       <div className="flex items-center gap-3 mb-3">
         {/* Connection Status */}
         <span
           className={`px-2 py-0.5 rounded-full text-xs ${
             connectionStatus === "연결됨"
-              ? "bg-green-100 text-green-800"
+              ? "bg-green-900 text-green-200"
               : connectionStatus === "연결 중..."
-              ? "bg-yellow-100 text-yellow-800"
-              : "bg-red-100 text-red-800"
+              ? "bg-yellow-900 text-yellow-200"
+              : "bg-red-900 text-red-200"
           }`}
         >
           {connectionStatus}
         </span>
 
         {/* AGV Count */}
-        <div className="flex items-center text-sm">
+        <div className="flex items-center text-sm text-gray-200">
           <span className="mr-1">AGV:</span>
           <input
             type="number"
@@ -294,17 +294,17 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
             max="10"
             value={agvCount}
             onChange={handleAgvCountChange}
-            className="w-16 px-1.5 py-0.5 border rounded text-sm"
+            className="w-16 px-1.5 py-0.5 border border-gray-700 rounded text-sm bg-[#0D1B2A] text-gray-200"
           />
         </div>
 
         {/* Speed Selection */}
-        <div className="flex items-center text-sm">
+        <div className="flex items-center text-sm text-gray-200">
           <span className="mr-1">Speed:</span>
           <select
             value={speed}
             onChange={handleSpeedChange}
-            className="w-16 px-1.5 py-0.5 border rounded text-sm"
+            className="w-16 px-1.5 py-0.5 border border-gray-700 rounded text-sm bg-[#0D1B2A] text-gray-200"
             disabled={connectionStatus !== "연결됨"}
           >
             <option value={1}>1x</option>
@@ -316,7 +316,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         </div>
 
         {/* Current AGVs info */}
-        <div className="text-xs text-gray-600">
+        <div className="text-xs text-gray-400">
           Current AGVs: {agvData.agv_count || 0}
         </div>
 
@@ -324,13 +324,13 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         <div className="flex items-center gap-2 ml-auto">
           <button
             onClick={requestAnalysis}
-            className="px-2 py-1 rounded text-sm bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            className="px-2 py-1 rounded text-sm bg-blue-900 text-gray-200 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 border border-gray-700"
             disabled={connectionStatus !== "연결됨" || isAnalyzing}
           >
             {isAnalyzing ? (
               <>
                 <svg
-                  className="animate-spin h-3 w-3 text-white"
+                  className="animate-spin h-3 w-3 text-gray-200"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
@@ -358,8 +358,8 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
           <button
             onClick={toggleSimulation}
             className={`px-2 py-1 rounded text-sm ${
-              isRunning ? "bg-red-500" : "bg-green-500"
-            } text-white hover:opacity-90`}
+              isRunning ? "bg-red-900" : "bg-green-900"
+            } text-gray-200 hover:opacity-90 border border-gray-700`}
             disabled={connectionStatus !== "연결됨"}
           >
             {isRunning ? "Stop" : "Start"}
@@ -369,7 +369,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
 
       {/* Map Container */}
       <div
-        className="relative h-96 overflow-auto border border-gray-200 rounded-lg"
+        className="relative h-96 overflow-auto border border-gray-700 rounded-lg bg-[#0D1B2A]"
         ref={mapContainerRef}
       >
         <div
@@ -411,29 +411,31 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         {analysisResult && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-semibold mb-2">AGV 운영 통계</h3>
+              <h3 className="font-semibold mb-2 text-gray-200">
+                AGV 운영 통계
+              </h3>
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">시간당 처리량</div>
-                  <div className="text-lg font-semibold">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">시간당 처리량</div>
+                  <div className="text-lg font-semibold text-gray-200">
                     {analysisResult.throughput_per_hour.toFixed(1)}건/시간
                   </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">AGV당 배송량</div>
-                  <div className="text-lg font-semibold">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">AGV당 배송량</div>
+                  <div className="text-lg font-semibold text-gray-200">
                     {analysisResult.delivered_per_agv.toFixed(1)}건
                   </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">평균 사이클 타임</div>
-                  <div className="text-lg font-semibold">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">평균 사이클 타임</div>
+                  <div className="text-lg font-semibold text-gray-200">
                     {analysisResult.avg_cycle.toFixed(1)}초
                   </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-sm text-gray-600">AGV 수</div>
-                  <div className="text-lg font-semibold">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">AGV 수</div>
+                  <div className="text-lg font-semibold text-gray-200">
                     {analysisResult.agv_count}대
                   </div>
                 </div>

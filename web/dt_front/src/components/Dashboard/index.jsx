@@ -27,24 +27,33 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">로봇 운용 현황</h2>
+    <div className="space-y-6 bg-[#11263f] p-6 min-h-screen">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-[#0D1B2A] rounded-lg shadow-lg p-6 border border-white/10">
+          <h2 className="text-lg font-semibold mb-4 text-white">
+            로봇 운용 현황
+          </h2>
           <StatusCard data={statusData} />
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">물류 운용 현황</h2>
+        <div className="bg-[#0D1B2A] rounded-lg shadow-lg p-6 border border-white/10">
+          <h2 className="text-lg font-semibold mb-4 text-white">
+            물류 운용 현황
+          </h2>
           <CountCard data={orderData} />
         </div>
       </div>
 
-      <AgvGraph
-        onDataUpdate={handleDataUpdate}
-        onOrderUpdate={handleOrderUpdate}
-      />
-      <AgvTable />
+      <div className="bg-[#0D1B2A] rounded-lg shadow-lg border border-white/10">
+        <AgvGraph
+          onDataUpdate={handleDataUpdate}
+          onOrderUpdate={handleOrderUpdate}
+        />
+      </div>
+
+      <div className="bg-[#0D1B2A] rounded-lg shadow-lg border border-white/10">
+        <AgvTable />
+      </div>
     </div>
   );
 }

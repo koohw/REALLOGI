@@ -28,7 +28,7 @@ const LoginForm = ({ onSubmit, error }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <label htmlFor="email" className="block text-gray-700 text-lg">
+        <label htmlFor="email" className="block text-gray-300 text-lg">
           Email
         </label>
         <input
@@ -37,14 +37,16 @@ const LoginForm = ({ onSubmit, error }) => {
           name="email"
           value={formData.email}
           onChange={handleChange}
-          className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full p-3 border border-gray-600 rounded-md bg-[#0D1B2A] text-gray-200 
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                   placeholder-gray-500"
           placeholder="Enter your email"
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="password" className="block text-gray-700 text-lg">
+        <label htmlFor="password" className="block text-gray-300 text-lg">
           Password
         </label>
         <input
@@ -53,17 +55,24 @@ const LoginForm = ({ onSubmit, error }) => {
           name="password"
           value={formData.password}
           onChange={handleChange}
-          className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full p-3 border border-gray-600 rounded-md bg-[#0D1B2A] text-gray-200 
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                   placeholder-gray-500"
           placeholder="Enter your password"
           required
         />
       </div>
 
-      {error && <div className="text-red-500 text-sm">{error}</div>}
+      {error && (
+        <div className="text-red-400 text-sm bg-red-900 bg-opacity-50 p-2 rounded">
+          {error}
+        </div>
+      )}
 
       <button
         type="submit"
-        className="w-full bg-gray-800 text-white p-3 rounded-md hover:bg-gray-700 transition-colors"
+        className="w-full bg-blue-900 text-gray-200 p-3 rounded-md hover:bg-blue-800 
+                 transition-colors border border-gray-600"
       >
         Sign In
       </button>
@@ -71,13 +80,13 @@ const LoginForm = ({ onSubmit, error }) => {
       <div className="flex justify-between pt-4">
         <button
           onClick={handleForgotPassword}
-          className="text-gray-600 hover:text-gray-800 underline"
+          className="text-gray-400 hover:text-gray-200 underline"
         >
           Forgot password?
         </button>
         <Link
           to="/signup"
-          className="text-gray-600 hover:text-gray-800 underline"
+          className="text-gray-400 hover:text-gray-200 underline"
         >
           Join
         </Link>
