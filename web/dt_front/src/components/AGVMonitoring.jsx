@@ -138,14 +138,16 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     setShowAnalysisModal(true);
   }, []);
 
-  const requestAnalysis = useCallback(() => {
+  // "심층 분석" 버튼: 서버의 REPEAT_RUNS(15회) 반복실험 결과 요청
+  const requestDeepAnalysis = useCallback(() => {
     if (socketRef.current?.connected) {
       setIsAnalyzing(true);
       setAnalysisResult(null);
-      socketRef.current.emit("message", {
-        command: "analyze",
+      socketRef.current.emit("simulate_final", {
         agv_count: agvCount,
-        speed,
+        duration: 3000,
+        initial_speed: speed,
+        output: "final",
       });
     }
   }, [agvCount, speed]);
@@ -323,7 +325,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         {/* Action Buttons */}
         <div className="flex items-center gap-2 ml-auto">
           <button
-            onClick={requestAnalysis}
+            onClick={requestDeepAnalysis}
             className="px-2 py-1 rounded text-sm bg-blue-900 text-gray-200 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 border border-gray-700"
             disabled={connectionStatus !== "연결됨" || isAnalyzing}
           >
@@ -352,7 +354,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                 분석중
               </>
             ) : (
-              "즉시 분석"
+              "심층 분석"
             )}
           </button>
           <button
@@ -437,6 +439,34 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                   <div className="text-sm text-gray-400">AGV 수</div>
                   <div className="text-lg font-semibold text-gray-200">
                     {analysisResult.agv_count}대
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">처리량 표준편차</div>
+                  <div className="text-lg font-semibold text-gray-200">
+                    {analysisResult.std_throughput_per_hour.toFixed(1)}건/시간
+                  </div>
+                </div>
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">배송량 표준편차</div>
+                  <div className="text-lg font-semibold text-gray-200">
+                    {analysisResult.std_delivered_per_agv.toFixed(1)}건
+                  </div>
+                </div>
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">총 반복실험 횟수</div>
+                  <div className="text-lg font-semibold text-gray-200">
+                    {analysisResult.repeat_runs}회
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
+                  <div className="text-sm text-gray-400">평균 AGV 가동률</div>
+                  <div className="text-lg font-semibold text-gray-200">
+                    {analysisResult.avg_utilization.toFixed(2)}
                   </div>
                 </div>
               </div>
