@@ -27,7 +27,7 @@ def process_path_command(full_path, client):
     print(f"[가상 하드웨어] 전체 경로 명령 수신: {full_path}")
     # 전체 경로를 순차적으로 따라 이동 (각 좌표마다 1초 지연)
     for pos in full_path:
-        time.sleep(0.1)  # 이동 소요 시간 시뮬레이션
+        time.sleep(1)  # 이동 소요 시간 시뮬레이션
         current_position = pos
         # 이동 완료 후 ACK 메시지 전송
         ack_payload = {
