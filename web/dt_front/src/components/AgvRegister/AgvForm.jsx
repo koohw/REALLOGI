@@ -15,7 +15,7 @@ export default function AgvForm({ onSubmit }) {
   });
 
   const baseUrl = process.env.REACT_APP_API_URL ;
-  const fullUrlforRegist = `${baseUrl}/agvs/register`;
+  const fullUrlforRegist = `${baseUrl}/api/agvs/register`;
   
 
   useEffect(() => {
