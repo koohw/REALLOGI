@@ -42,7 +42,7 @@ apiClient.interceptors.response.use(
 export const authApi = {
   login: async (email, password) => {
     try {
-      return await apiClient.post('/users/login', { email, password });
+      return await apiClient.post('/api/users/login', { email, password });
     } catch (error) {
       throw new Error(error.message || 'Login failed');
     }
@@ -50,7 +50,7 @@ export const authApi = {
 
   logout: async () => {
     try {
-      return await apiClient.post('/users/logout');
+      return await apiClient.post('/api/users/logout');
     } catch (error) {
       throw new Error(error.message || 'Logout failed');
     }
@@ -58,7 +58,7 @@ export const authApi = {
 
   getCurrentUser: async () => {
     try {
-      return await apiClient.get('/users/current');
+      return await apiClient.get('/api/users/current');
     } catch (error) {
       throw new Error(error.message || 'Failed to get current user');
     }
@@ -66,7 +66,7 @@ export const authApi = {
 
   checkEmail: async (email) => {
     try {
-      return await apiClient.get('/users/check-email', {
+      return await apiClient.get('/api/users/check-email', {
         params: { email }
       });
     } catch (error) {
@@ -76,7 +76,7 @@ export const authApi = {
 
   signup: async (userData) => {
     try {
-      return await apiClient.post('/users/signup', userData);
+      return await apiClient.post('/api/users/signup', userData);
     } catch (error) {
       throw new Error(error.message || 'Signup failed');
     }
@@ -84,7 +84,7 @@ export const authApi = {
 
   updateUserInfo: async (updateData) => {
     try {
-      return await apiClient.put('/users/update', updateData);
+      return await apiClient.put('/api/users/update', updateData);
     } catch (error) {
       throw new Error(error.message || 'Update failed');
     }
@@ -92,7 +92,7 @@ export const authApi = {
 
   getCompanies: async () => {
     try {
-      return await apiClient.get('/companies');
+      return await apiClient.get('/api/companies');
     } catch (error) {
       throw new Error(error.message || 'Failed to fetch companies');
     }
@@ -100,7 +100,7 @@ export const authApi = {
 
   getWarehouses: async (companyId) => {
     try {
-      return await apiClient.get(`/users/warehouses/${companyId}`);
+      return await apiClient.get(`/api/users/warehouses/${companyId}`);
     } catch (error) {
       throw new Error(error.message || 'Failed to fetch warehouses');
     }
