@@ -732,7 +732,7 @@ def check_deadlock(agv_positions, shared_data):
 # 9) AGV 프로세스 및 이동 함수 (충돌 회피 및 장애물 고려)
 ##############################################################################
 MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
-SIMULATE_MQTT = False  # AGV1은 MQTT로 전체 경로 명령 전송
+SIMULATE_MQTT = True  # AGV1은 MQTT로 전체 경로 명령 전송
 
 def random_start_position(agv_id):
     col = (agv_id * 2) % COLS
