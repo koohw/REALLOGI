@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../hooks/useAuth"; // useAuth 훅을 가져옵니다.
+import { useAuth } from "../../hooks/useAuth";
 import MenuItem from "./MenuItem";
 
 export default function Sidebar() {
-  const { logout } = useAuth(); // useAuth 훅에서 logout 함수 가져오기
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const menuItems = [
@@ -15,25 +15,26 @@ export default function Sidebar() {
   ];
 
   const handleLogout = async () => {
-    await logout(); // 로그아웃 처리
-    navigate("/login"); // 로그인 페이지로 리디렉션
+    await logout();
+    navigate("/login");
   };
 
   return (
-    <div className="w-64 min-h-screen bg-white shadow-lg">
+    <div className="w-64 h-full bg-[#0A1829] shadow-lg">
       <div className="p-6">
-        <h1 className="text-3xl font-bold mb-8 text-center">RealLogi</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center text-white">
+          RealLogi
+        </h1>
         <nav className="space-y-4">
           {menuItems.map((item, index) => (
             <MenuItem key={index} {...item} />
           ))}
         </nav>
 
-        {/* 로그아웃 버튼 추가 */}
         <div className="mt-8 ml-4">
           <button
             onClick={handleLogout}
-            className="w-1/2 p-4 bg-gray-300 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="w-1/2 p-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             로그아웃
           </button>
