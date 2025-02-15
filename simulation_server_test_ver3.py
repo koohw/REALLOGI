@@ -42,7 +42,7 @@ is_paused = False
 
 # 예약: (cell 좌표 -> AGV id)
 RESERVED_CELLS = {}
-# 추가: 목표(적재/하역) 예약: (cell 좌표 -> AGV id)
+# 목표 예약: (cell 좌표 -> AGV id) -- 적재/하역 목표 예약
 TARGET_RESERVATIONS = {}
 
 # -----------------------------------------
@@ -140,7 +140,6 @@ def create_app(port):
 
     # --- 실시간 목표 재설계 함수 (목표 예약 포함) ---
     def find_nearest_exit(pos, current_agv_id=None):
-        # 만약 현재 위치가 이미 출구라면 그대로 반환
         if pos in exit_coords:
             return pos
         available = []
@@ -168,7 +167,6 @@ def create_app(port):
             return chosen
 
     def find_nearest_shelf(pos, current_agv_id=None):
-        # 만약 현재 위치가 이미 선반이라면 그대로 반환
         if pos in shelf_coords:
             return pos
         available = []
@@ -205,11 +203,12 @@ def create_app(port):
             self.start_pos = (float(start_pos[0]), float(start_pos[1]))
             self.pos = (float(start_pos[0]), float(start_pos[1]))
             self.path = []
-            self.cargo = 0
+            self.cargo = 0  # 0: empty, 1: loaded
             self.pickup_time = None
             self.arrival_time = 0
             self.last_pos = self.pos
             self.stuck_steps = 0
+            self.just_picked = False
 
     class Stats:
         def __init__(self):
@@ -281,6 +280,8 @@ def create_app(port):
             agv.pickup_time = None
         agv.cargo = 0
         stats.delivered_count += 1
+        # 하역 완료 후, 상태 플래그 초기화
+        agv.just_picked = False
 
     def extend_sim_duration_if_needed(current_time):
         global SIM_DURATION
@@ -356,20 +357,11 @@ def create_app(port):
                         agv.path = new_path
                     yield env.timeout(0.1)
                     continue
+            # 수정된 부분: 적재 위치에서, 만약 아직 적재하지 않았다면 do_pick 실행하고 바로 하역 경로 설계
             if agv.cargo == 0 and current_cell in shelf_coords:
-                # 수정: 만약 현재 위치가 이미 선반이면 바로 적재 실행
-                if current_cell not in shelf_coords:
-                    available_shelf = find_nearest_shelf(current_cell, agv.id)
-                    if available_shelf != current_cell:
-                        new_path = bfs_path(current_cell, available_shelf, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
-                        if new_path and len(new_path) > 1:
-                            agv.path = new_path
-                        yield env.timeout(0.1)
-                        continue
-                else:
-                    # 현재 위치가 선반이면 do_pick 실행
+                if not agv.just_picked:
                     yield env.process(do_pick(agv, env, stats, cell_blocked))
-                    # 목표(출구)를 새로 예약 및 경로 탐색
+                    agv.just_picked = True
                     target = find_nearest_exit(current_cell, agv.id)
                     new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
                     if new_path and len(new_path) > 1:
@@ -432,21 +424,8 @@ def create_app(port):
                 yield env.timeout(0.1)
 
             current_int_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
-            if agv.cargo == 0 and current_int_cell in shelf_coords:
-                available_shelf = find_nearest_shelf(current_int_cell, agv.id)
-                if available_shelf != current_int_cell:
-                    new_path = bfs_path(current_int_cell, available_shelf, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
-                    if new_path and len(new_path) > 1:
-                        agv.path = new_path
-                    yield env.timeout(0.1)
-                    continue
-                yield env.process(do_pick(agv, env, stats, cell_blocked))
-                target = find_nearest_exit(current_int_cell, agv.id)
-                new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
-                if new_path and len(new_path) > 1:
-                    agv.path = new_path
-                yield env.timeout(random.uniform(0.5, 1.5))
-            elif agv.cargo == 1 and current_int_cell in exit_coords:
+            # 하역 지점 도착 처리: 출구에 도착하면 하역 진행하고, 상태 초기화
+            if agv.cargo == 1 and current_int_cell in exit_coords:
                 available_exit = find_nearest_exit(current_int_cell, agv.id)
                 if available_exit != current_int_cell:
                     new_path = bfs_path(current_int_cell, available_exit, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
