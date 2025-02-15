@@ -120,7 +120,10 @@
 #         "AGV 4": 0
 #     },
 #     "efficiency": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
-#     "overall_efficiency_history": []
+#     "overall_efficiency_history": [],
+#     # 사용 중인 loading/unloading 목표를 추적 (AGV1 제외)
+#     "used_shelf_targets": set(),
+#     "used_exit_targets": set()
 # }
 
 # ##############################################################################
@@ -169,7 +172,6 @@
 # def send_full_path_to_agv1(full_path):
 #     with data_lock:
 #         current = shared_data["positions"]["AGV 1"]
-#     # 만약 현재 위치가 경로의 시작이 아니라면, 현재 위치를 경로 시작에 추가
 #     if full_path[0] != current:
 #         full_path.insert(0, current)
 #     logging.debug("[SIM] send_full_path_to_agv1(full_path=%s)", full_path)
@@ -233,11 +235,10 @@
 # SIMULATE_MQTT = True  # AGV1은 MQTT로 전체 경로 명령 전송
 
 # def random_start_position(agv_id):
-#     # AGV 1: (8,0), AGV 2: (8,2), AGV 3: (8,4), AGV 4: (8,6)
 #     col = (agv_id * 2) % COLS
 #     return (ROWS - 1, col)
 
-# def agv_process(env, agv_id, agv_positions, logs, goal_pos, shelf_coords, exit_coords):
+# def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
 #     init_pos = random_start_position(agv_id)
 #     agv_positions[agv_id] = init_pos
 #     logs[agv_id].append((datetime.now().isoformat(), init_pos))
@@ -251,8 +252,16 @@
 #     logging.debug("AGV %s 시작 위치: %s", agv_id, init_pos)
 
 #     while True:
-#         # 선반(적재) 이동: 임의의 선반 좌표 선택 (현재 위치와 다르게)
-#         loading_target = random.choice(shelf_coords)
+#         # Loading 단계: AGV1은 자유롭게, 나머지는 겹치지 않는 loading target 선택
+#         if agv_id == 0:
+#             loading_target = random.choice(shelf_coords)
+#         else:
+#             with data_lock:
+#                 available = set(shelf_coords) - shared_data["used_shelf_targets"]
+#                 if not available:
+#                     available = set(shelf_coords)
+#                 loading_target = random.choice(list(available))
+#                 shared_data["used_shelf_targets"].add(loading_target)
 #         with data_lock:
 #             current = shared_data["positions"][key]
 #         while loading_target == current:
@@ -263,17 +272,27 @@
 #             if agv_id == 0:
 #                 shared_data["agv1_expected_target"] = loading_target
 #         yield from move_to(env, agv_id, agv_positions, logs, loading_target)
-
-#         # 도착 후 10초간 하역 상태 유지
+#         # 적재 완료 후 10초 대기
 #         with data_lock:
 #             shared_data["statuses"][key] = "LOADING"
 #             shared_data["directions"][key] = ""
 #         logging.info("[%s] %s 도착 -> %s (적재 완료, 10초 대기)", datetime.now().isoformat(), key, loading_target)
 #         yield env.timeout(10)
 #         loading_complete_time = env.now
+#         if agv_id != 0:
+#             with data_lock:
+#                 shared_data["used_shelf_targets"].discard(loading_target)
 
-#         # 출구(하역) 이동: 임의의 출구 좌표 선택 (현재 위치와 다르게)
-#         exit_target = random.choice(exit_coords)
+#         # Unloading 단계: AGV1은 자유롭게, 나머지는 겹치지 않는 unloading target 선택
+#         if agv_id == 0:
+#             exit_target = random.choice(exit_coords)
+#         else:
+#             with data_lock:
+#                 available = set(exit_coords) - shared_data["used_exit_targets"]
+#                 if not available:
+#                     available = set(exit_coords)
+#                 exit_target = random.choice(list(available))
+#                 shared_data["used_exit_targets"].add(exit_target)
 #         with data_lock:
 #             current = shared_data["positions"][key]
 #         while exit_target == current:
@@ -285,7 +304,6 @@
 #                 shared_data["agv1_expected_target"] = exit_target
 #         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
 #         unloading_complete_time = env.now
-
 #         cycle_eff = unloading_complete_time - loading_complete_time
 #         with data_lock:
 #             if shared_data["order_completed"][key] == 0:
@@ -298,38 +316,63 @@
 #             avg_eff = total_eff / len(shared_data["efficiency"]) if shared_data["efficiency"] else 0
 #             shared_data["overall_efficiency_history"].append([datetime.now().isoformat(), avg_eff])
 #             logging.info("[SIM] %s 사이클 효율: %.2f / 전체 평균 효율: %.2f", key, shared_data["efficiency"][key], avg_eff)
-
 #         logging.info("[%s] %s 도착 -> %s (하역 완료, 5초 대기)", datetime.now().isoformat(), key, exit_target)
 #         yield env.timeout(5)
+#         if agv_id != 0:
+#             with data_lock:
+#                 shared_data["used_exit_targets"].discard(exit_target)
 
 # def move_to(env, agv_id, agv_positions, logs, target):
 #     """
-#     충돌 회피:
-#       1. 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기.
-#       2. 각 이동 단계마다 다른 AGV의 현재 위치를 장애물로 포함하여 BFS 경로를 재계산.
-#       3. AGV1은 전체 경로를 미리 계산하여 MQTT로 전달한 후, 
-#          하드웨어 ACK에 따라 진행합니다.
-#       4. 다른 AGV는 AGV1의 현재 위치와 바로 다음 이동 좌표, 
-#          그리고 (자신을 제외한) LOADING/UNLOADING 상태인 셀을 장애물로 인식하여 한 칸씩 이동합니다.
+#     이동 단계: 각 이동 단계마다 다른 AGV의 현재 위치를 장애물로 포함해 BFS 경로를 계산.
+#     AGV1은 전체 경로를 미리 계산해 MQTT로 전송.
+#     비AGV1은 대기 중 5초 이상이면 상태를 STOP으로 전환하고 새로운 목표를 재설정.
 #     """
 #     key = f"AGV {agv_id+1}"
     
 #     with data_lock:
 #         current = agv_positions[agv_id]
-#     # 만약 이미 현재 위치와 목표가 같다면 이동할 필요가 없음.
 #     if current == target:
 #         logging.info("%s: 이미 목표에 도착함 (%s)", key, target)
 #         return
 
-#     # 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기
+#     # 만약 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기하면서 대기시간 체크
+#     wait_start = env.now
 #     while True:
 #         with data_lock:
 #             occupied = any(pos == target for k, pos in shared_data["positions"].items() if k != key)
 #         if not occupied:
 #             break
-#         logging.info("%s 대기: 목표 %s가 다른 AGV에 의해 점유됨", key, target)
+#         if agv_id != 0 and (env.now - wait_start) > 5:
+#             # STOP 상태 전환 및 목표 재설정
+#             with data_lock:
+#                 shared_data["statuses"][key] = "STOP"
+#                 current_target = shared_data["target"][key]
+#             new_target = current_target
+#             if current_target in shelf_coords:
+#                 with data_lock:
+#                     available = set(shelf_coords) - shared_data["used_shelf_targets"]
+#                     if available:
+#                         available.discard(current_target)
+#                         new_target = random.choice(list(available))
+#                         shared_data["used_shelf_targets"].discard(current_target)
+#                         shared_data["used_shelf_targets"].add(new_target)
+#             elif current_target in exit_coords:
+#                 with data_lock:
+#                     available = set(exit_coords) - shared_data["used_exit_targets"]
+#                     if available:
+#                         available.discard(current_target)
+#                         new_target = random.choice(list(available))
+#                         shared_data["used_exit_targets"].discard(current_target)
+#                         shared_data["used_exit_targets"].add(new_target)
+#             with data_lock:
+#                 shared_data["target"][key] = new_target
+#                 shared_data["statuses"][key] = "RUNNING"
+#             logging.info("%s: STOP 상태 5초 초과 -> 새로운 목표 재설정: %s", key, new_target)
+#             wait_start = env.now  # 타이머 초기화
 #         yield env.timeout(1)
 
+#     # AGV1은 MQTT 전송 후 진행
 #     if agv_id == 0 and SIMULATE_MQTT:
 #         with data_lock:
 #             current = agv_positions[agv_id]
@@ -340,7 +383,6 @@
 #             yield env.timeout(0.5)
 #         else:
 #             send_full_path_to_agv1(path)
-#             # 하드웨어의 ACK 업데이트를 기다리며 진행
 #             while True:
 #                 yield env.timeout(0.5)
 #                 with data_lock:
@@ -359,16 +401,15 @@
 #                 agv_positions[agv_id] = target
 #         return
 
-#     # 나머지 AGV의 경우
+#     # 비AGV1의 경우, 한 칸씩 이동하며 경로 재계산
 #     while True:
 #         with data_lock:
 #             current = agv_positions[agv_id]
-#             # 만약 도착한 경우 바로 종료
 #             if current == target:
 #                 logging.info("%s: 이미 목표에 도착함 (%s)", key, target)
 #                 return
 #             obstacles = { pos for k, pos in shared_data["positions"].items() if k != key }
-#             # AGV1의 현재 위치 및 바로 다음 이동 좌표를 장애물에 추가
+#             # AGV1의 진행 경로(현재 및 다음 셀)를 장애물에 포함
 #             agv1_key = "AGV 1"
 #             if agv1_key in shared_data["positions"] and shared_data["positions"][agv1_key]:
 #                 obstacles.add(shared_data["positions"][agv1_key])
@@ -380,9 +421,9 @@
 #                             obstacles.add(agv1_path[idx+1])
 #                     except ValueError:
 #                         pass
-#             # LOADING/UNLOADING 상태인 다른 AGV들의 위치만 장애물에 추가 (자신은 제외)
+#             # 다른 AGV들이 STOP, LOADING, UNLOADING 상태인 경우(자신 제외)
 #             for k, status in shared_data["statuses"].items():
-#                 if k != key and status in ("LOADING", "UNLOADING"):
+#                 if k != key and status in ("STOP", "LOADING", "UNLOADING"):
 #                     pos = shared_data["positions"].get(k)
 #                     if pos:
 #                         obstacles.add(pos)
@@ -439,12 +480,11 @@
 #         agv_positions[i] = None
 #         logs[i] = []
 #     for i in range(NUM_AGV):
-#         env.process(agv_process(env, i, agv_positions, logs, None, shelf_coords, exit_coords))
+#         env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
 #     env.run(until=float('inf'))
 
 # if __name__ == "__main__":
 #     simulation_main()
-
 
 
 
@@ -735,7 +775,6 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             shared_data["directions"][key] = ""
         logging.info("[%s] %s 도착 -> %s (적재 완료, 10초 대기)", datetime.now().isoformat(), key, loading_target)
         yield env.timeout(10)
-        loading_complete_time = env.now
         if agv_id != 0:
             with data_lock:
                 shared_data["used_shelf_targets"].discard(loading_target)
@@ -761,7 +800,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 shared_data["agv1_expected_target"] = exit_target
         yield from move_to(env, agv_id, agv_positions, logs, exit_target)
         unloading_complete_time = env.now
-        cycle_eff = unloading_complete_time - loading_complete_time
+        cycle_eff = unloading_complete_time  # (이전 코드에선 시간 차이를 사용)
         with data_lock:
             if shared_data["order_completed"][key] == 0:
                 shared_data["efficiency"][key] = cycle_eff
@@ -781,11 +820,20 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
 
 def move_to(env, agv_id, agv_positions, logs, target):
     """
-    이동 단계: 각 이동 단계마다 다른 AGV의 현재 위치를 장애물로 포함해 BFS 경로를 계산.
-    AGV1은 전체 경로를 미리 계산해 MQTT로 전송.
-    비AGV1은 대기 중 5초 이상이면 상태를 STOP으로 전환하고 새로운 목표를 재설정.
+    이동 단계: 각 단계마다 장애물(다른 AGV의 현재 위치, AGV1의 진행 경로, STOP/LOADING/UNLOADING 상태 셀)을 고려해 BFS 경로를 계산.
+    AGV1은 전체 경로를 미리 계산해 MQTT로 전송하고,
+    비AGV1은 대기 중 5초 이상이면 STOP 상태로 전환 후 새로운 목표로 재설정하도록 합니다.
     """
     key = f"AGV {agv_id+1}"
+    
+    # 만약 현재 상태가 STOP이면, 재가동 명령이 들어올 때까지 대기
+    while True:
+        with data_lock:
+            if shared_data["statuses"][key] != "STOP":
+                break
+            else:
+                logging.info("%s: 정지 상태. 재가동 명령 대기 중", key)
+        yield env.timeout(1)
     
     with data_lock:
         current = agv_positions[agv_id]
@@ -793,15 +841,15 @@ def move_to(env, agv_id, agv_positions, logs, target):
         logging.info("%s: 이미 목표에 도착함 (%s)", key, target)
         return
 
-    # 만약 목표 셀이 다른 AGV에 의해 점유되어 있으면 대기하면서 대기시간 체크
+    # 목표 셀이 다른 AGV에 의해 점유되면 대기하면서 대기시간 체크
     wait_start = env.now
     while True:
         with data_lock:
             occupied = any(pos == target for k, pos in shared_data["positions"].items() if k != key)
         if not occupied:
             break
+        # 만약 비AGV1이고 5초 이상 대기했다면 STOP 상태 처리 후 새로운 목표 재설정
         if agv_id != 0 and (env.now - wait_start) > 5:
-            # STOP 상태 전환 및 목표 재설정
             with data_lock:
                 shared_data["statuses"][key] = "STOP"
                 current_target = shared_data["target"][key]
@@ -858,9 +906,14 @@ def move_to(env, agv_id, agv_positions, logs, target):
                 agv_positions[agv_id] = target
         return
 
-    # 비AGV1의 경우, 한 칸씩 이동하며 경로 재계산
+    # 비AGV1의 경우: 한 칸씩 이동하며 경로 재계산
     while True:
         with data_lock:
+            # 만약 외부로 정지 명령이 내려왔으면 대기
+            if shared_data["statuses"][key] == "STOP":
+                logging.info("%s: 정지 상태 감지, 이동 중단", key)
+                yield env.timeout(1)
+                continue
             current = agv_positions[agv_id]
             if current == target:
                 logging.info("%s: 이미 목표에 도착함 (%s)", key, target)
