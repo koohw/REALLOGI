@@ -18,34 +18,42 @@ PORT = 1883
 TOPIC_QR_INFO = "agv/qr_info"
 TOPIC_SIMPY_TO_AGV = "simpy/commands"
 
-mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311)
-mqtt_client.connect(BROKER, PORT, 60)
-mqtt_client.loop_start()
+# MQTT로 받은 전체 경로를 저장할 전역 리스트
+mqtt_received_path = []
 
-destinations = None       # 전역 변수: 목적지 좌표 리스트 (JSON 배열)
-current_dest_idx = 0      # 현재 목적지 인덱스
+def on_connect(client, userdata, flags, rc):
+    print("[MQTT] on_connect rc =", rc)
+    client.subscribe(TOPIC_SIMPY_TO_AGV)
+    print(f"[MQTT] Subscribed to topic: {TOPIC_SIMPY_TO_AGV}")
 
-def on_mqtt_message(client, userdata, msg):
-    global destinations
+def on_message(client, userdata, msg):
+    """
+    시뮬레이션에서 "simpy/commands" 토픽으로 전송되는 메시지를 수신.
+    예) {"command": "PATH", "data": {"full_path": [[8, 0], [8, 1], ...]}}
+    """
+    global mqtt_received_path
     try:
         payload = json.loads(msg.payload.decode())
-        if "destination" in payload:
-            destinations = payload["destination"]
-            print("Received destination coordinates:", destinations)
+        cmd = payload.get('command')
+        if cmd == 'STOP':
+            print("[MQTT] AGV 정지 명령 수신")
+        elif cmd == 'RESUME':
+            print("[MQTT] AGV 재시작 명령 수신")
+        elif cmd == 'PATH':
+            full_path = payload.get('data', {}).get('full_path', [])
+            print("[MQTT] PATH 명령 수신, full_path =", full_path)
+            # 여기서 full_path를 실제 경로 리스트로 저장
+            mqtt_received_path = full_path
         else:
-            command = payload.get("command")
-            if command == "STOP":
-                print("Received STOP command")
-            elif command == "RESUME":
-                print("Received RESUME command")
-            elif command == "ROTATE_LEFT":
-                print("Received ROTATE_LEFT command")
-            elif command == "ROTATE_RIGHT":
-                print("Received ROTATE_RIGHT command")
+            print("[MQTT] 알 수 없는 명령 수신:", cmd)
     except Exception as e:
-        print("MQTT message error:", e)
+        print("[MQTT] on_message 오류:", e)
 
-mqtt_client.on_message = on_mqtt_message
+mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311)
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
+mqtt_client.connect(BROKER, PORT, 60)
+mqtt_client.loop_start()
 
 # --- 모터 제어 클래스 (건들지 말 것) ---
 class MotorDriver:
@@ -135,9 +143,9 @@ class MPU6050:
         self.calibrate_sensor()
 
     def init_sensor(self):
-        self.bus.write_byte_data(self.address, 0x6B, 0x00)
-        self.bus.write_byte_data(self.address, 0x1C, 0x00)
-        self.bus.write_byte_data(self.address, 0x1B, 0x00)
+        self.bus.write_byte_data(self.address, 0x6B, 0x00)  # 전원 관리 해제
+        self.bus.write_byte_data(self.address, 0x1C, 0x00)  # 가속도 감도 설정
+        self.bus.write_byte_data(self.address, 0x1B, 0x00)  # 자이로 감도 설정
         time.sleep(0.1)
 
     def calibrate_sensor(self):
@@ -157,7 +165,7 @@ class MPU6050:
 
     def read_i2c_word(self, reg):
         high = self.bus.read_byte_data(self.address, reg)
-        low = self.bus.read_byte_data(self.address, reg + 1)
+        low = self.bus.read_byte_data(self.address, reg+1)
         val = (high << 8) + low
         return -((65535 - val) + 1) if val >= 0x8000 else val
 
@@ -170,6 +178,7 @@ class MPU6050:
         raw = self.get_raw_accel_data()
         x = (raw['x'] - self.accel_offset_x) / self.accel_scale
         y = (raw['y'] - self.accel_offset_y) / self.accel_scale
+        # 센서 장착 방향에 따른 좌표 변환
         return {'x': y, 'y': -x}
 
     def get_raw_gyro_data(self):
@@ -206,7 +215,6 @@ def detect_red_line(frame):
             return True, (cx, cy), mask
     return False, None, mask
 
-# --- QR 코드 검출 함수 (건들지 말 것) ---
 def detect_qr_code(frame):
     qr_detector = cv2.QRCodeDetector()
     data, points, _ = qr_detector.detectAndDecode(frame)
@@ -228,6 +236,11 @@ def line_following_with_qr():
         print("카메라를 열 수 없습니다.")
         return
 
+    # (기존에 목적지 좌표를 input으로 받던 부분 제거/주석)
+    # MQTT로부터 수신한 경로(mqtt_received_path)를 사용할 것이라 가정
+    # 필요에 따라 라인트래킹 + 경로 주행 로직을 직접 연동해야 합니다.
+    
+    # 가속도, PID 등 기존 그대로
     ret, frame = cap.read()
     if not ret:
         print("프레임을 읽을 수 없습니다.")
@@ -236,10 +249,9 @@ def line_following_with_qr():
     frame_height, frame_width = frame.shape[:2]
     frame_center = frame_width // 2
 
-    print("Waiting for destination coordinates from MQTT...")
-    while destinations is None:
-        time.sleep(0.1)
-    print("목적지 좌표 수신 완료:", destinations)
+    # 예시) 만약 MQTT로부터 받은 경로를 한 칸씩 소진하며 이동하고 싶다면,
+    # 아래처럼 사용 가능 (단, line_following + 경로 주행은 별도 설계 필요)
+    # e.g., destinations = mqtt_received_path
 
     try:
         bus = SMBus(7)
@@ -249,16 +261,14 @@ def line_following_with_qr():
         return
 
     pid = PID(kp=0.06, ki=0.0, kd=0.03)
-    original_speed = 40  # 기본 직진 속도
+    original_speed = 40
     current_speed = original_speed
     prev_time = time.time()
     prev_correction = 0
 
-    # 거리 및 속도 측정용 (단위: m)
     position_x = 0.0
     velocity_x = 0.0
 
-    # 상태 정의
     STATE_WAIT_START = 0
     STATE_STRAIGHT   = 1
     STATE_QR_FIND    = 2
@@ -268,12 +278,7 @@ def line_following_with_qr():
     waypoint_distance = 50
     error_margin = 5
 
-    angle = 0.0
-    alpha = 0.1
-    gravity = 9.81
-
-    print("시스템 시작: 출발지 QR 코드를 카메라에 보여주세요.")
-
+    print("시스템 시작: MQTT로부터 PATH 명령을 수신하거나, 출발지 QR 코드를 보여주세요.")
     try:
         while True:
             current_time = time.time()
@@ -285,30 +290,21 @@ def line_following_with_qr():
                 print("프레임 읽기 실패")
                 break
 
-            # --- 가속도계 측정 및 거리/속도 계산 ---
-            accel_data = mpu.get_accel_data()  # 단위: g
-            accel_forward = accel_data['x'] * 9.81  # m/s²
+            accel_data = mpu.get_accel_data()
+            accel_forward = accel_data['x'] * 9.81
             new_velocity_x = velocity_x + accel_forward * dt
             position_x += (velocity_x + new_velocity_x) / 2 * dt
             velocity_x = new_velocity_x
-
-            # 정수로 변환: 위치(단위: cm), 속도(단위: cm/s), 이동거리
-            pos_int = int(position_x * 100)    # 현재 x 위치 (cm)
-            vel_int = int(velocity_x * 100)    # 현재 속도 (cm/s)
             distance_traveled = abs(position_x) * 100
-            dist_int = int(distance_traveled)  # 이동 거리 (cm)
 
-            # --- 카메라 화면에 현재 위치·속도·거리 표시 (정수) ---
-            cv2.putText(frame, f"Position: {pos_int} cm", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            cv2.putText(frame, f"Velocity: {vel_int} cm/s", (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            cv2.putText(frame, f"Distance: {dist_int} cm", (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            cv2.putText(frame, f"Distance: {distance_traveled:.1f} cm",
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
-            # 상태별 동작
+            # (이하는 기존 라인트래킹, QR 감지 로직)
             if state == STATE_WAIT_START:
                 qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
+                cv2.putText(frame, "Waiting for Start QR", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 motor.MotorStop()
                 if qr_detected:
                     print("출발지 QR 코드 감지 – 직진 주행 시작")
@@ -337,7 +333,7 @@ def line_following_with_qr():
                     motor.MotorRun(0, 'forward', current_speed)
                     motor.MotorRun(1, 'forward', current_speed)
 
-                if abs(dist_int - waypoint_distance) <= error_margin:
+                if abs(distance_traveled - waypoint_distance) <= error_margin:
                     print("목적지 도착 임박: 속도 감속 및 QR 감지 모드 전환")
                     current_speed = 8
                     state = STATE_QR_FIND
@@ -349,24 +345,23 @@ def line_following_with_qr():
                 if qr_detected:
                     print("목적지 QR 코드 감지 – MQTT 전송 및 정지")
                     motor.MotorStop()
-                    dest_info = {
-                        "destination": destinations[current_dest_idx],
-                        "qr_data": qr_data
-                    }
+                    # 예: 여기서는 QR 코드를 감지하면 TOPIC_QR_INFO로 publish
+                    # 실제 시뮬레이션 전체 경로와 연동하려면, mqtt_received_path를 참고해
+                    # 다음 waypoint로 넘어가는 등 상태 설계를 해야 합니다.
+                    dest_info = {"destination": [99,99], "qr_data": qr_data}
                     mqtt_client.publish(TOPIC_QR_INFO, json.dumps(dest_info))
                     time.sleep(1)
                     state = STATE_STOP
 
             elif state == STATE_STOP:
                 motor.MotorStop()
+                cv2.putText(frame, "Stopped, waiting for command", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
                 print("정지 상태: 명령을 입력하세요 (RESUME / ROTATE_LEFT / ROTATE_RIGHT):")
                 cmd = input()
                 if cmd.strip().upper() == "RESUME":
                     print("재가동 명령 수신 – 직진 모드 전환")
-                    current_dest_idx += 1
-                    if current_dest_idx >= len(destinations):
-                        print("모든 목적지 도달 – 작업 종료")
-                        break
+                    # 원래는 다음 목적지 이동 로직을 구현해야 함
                     position_x = 0.0
                     velocity_x = 0.0
                     current_speed = original_speed
