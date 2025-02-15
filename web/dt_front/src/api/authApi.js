@@ -8,8 +8,7 @@ const apiClient = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin':'*'
+    'Content-Type': 'application/json'
   }
 });
 
