@@ -14,7 +14,7 @@ spring:
     show-sql: true
 
   allowed:
-    origin: ${AllowedOrigin}
+    origin: ${AllowedOrigin:localhost:8080}
 
 logging:
   level:
