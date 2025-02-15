@@ -40,6 +40,8 @@ const DEFAULT_MAP = [
 ];
 
 const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
+  const mapContainerRef = useRef(null);
+  const [scale, setScale] = useState(1);
   const [agvData, setAgvData] = useState({ agv_count: 0, agvs: [] });
   const [speed, setSpeed] = useState(1);
   const [isRunning, setIsRunning] = useState(false);
@@ -49,12 +51,34 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const socketRef = useRef(null);
-  const mapContainerRef = useRef(null);
   const previousPositionsRef = useRef(new Map());
 
-  const CELL_SIZE = 40;
-  const MAP_WIDTH = mapData.length * CELL_SIZE;
-  const MAP_HEIGHT = mapData[0].length * CELL_SIZE;
+  const BASE_CELL_SIZE = 40;
+  const MAP_WIDTH = mapData[0].length * BASE_CELL_SIZE;
+  const MAP_HEIGHT = mapData.length * BASE_CELL_SIZE;
+
+  // Calculate scale based on container size
+  useEffect(() => {
+    const updateScale = () => {
+      if (mapContainerRef.current) {
+        const containerWidth = mapContainerRef.current.clientWidth;
+        const containerHeight = mapContainerRef.current.clientHeight;
+
+        const scaleX = containerWidth / MAP_WIDTH;
+        const scaleY = containerHeight / MAP_HEIGHT;
+
+        // Use the smaller scale to ensure the entire map fits
+        const newScale = Math.min(scaleX, scaleY, 1);
+        setScale(newScale);
+      }
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, [MAP_WIDTH, MAP_HEIGHT]);
+
+  const CELL_SIZE = BASE_CELL_SIZE * scale;
 
   const getAGVColor = (agvId, currentX, currentY) => {
     const prevPosition = previousPositionsRef.current.get(agvId);
@@ -244,13 +268,13 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
             top: `${y}px`,
             width: `${CELL_SIZE}px`,
             height: `${CELL_SIZE}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
           }}
         >
           <div
             className="relative"
-            style={{
-              transform: `rotate(${agv.direction || 0}deg)`,
-            }}
+            style={{ transform: `rotate(${agv.direction || 0}deg)` }}
           >
             <div
               className={`w-8 h-8 rounded-full ${getAGVColor(
@@ -268,8 +292,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         </div>
       );
     });
-  }, [agvData, CELL_SIZE]);
-
+  }, [agvData, CELL_SIZE, scale]);
   return (
     <div className="p-3 border border-gray-700 rounded-lg bg-[#11263f] shadow-lg">
       {/* Controls Row */}
@@ -371,18 +394,18 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
 
       {/* Map Container */}
       <div
-        className="relative h-96 overflow-auto border border-gray-700 rounded-lg bg-[#0D1B2A]"
         ref={mapContainerRef}
+        className="relative h-96 border border-gray-700 rounded-lg bg-[#0D1B2A] overflow-hidden"
       >
         <div
           className="relative"
           style={{
-            width: `${MAP_HEIGHT}px`,
-            height: `${MAP_WIDTH}px`,
-            background: "#f8f9fa",
+            width: `${MAP_WIDTH}px`,
+            height: `${MAP_HEIGHT}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
           }}
         >
-          {/* Map Background */}
           {mapData.map((row, y) =>
             row.map((cell, x) => (
               <div
@@ -390,16 +413,14 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                 style={{
                   ...getCellStyle(cell),
                   position: "absolute",
-                  left: x * CELL_SIZE,
-                  top: y * CELL_SIZE,
-                  width: CELL_SIZE,
-                  height: CELL_SIZE,
+                  left: x * BASE_CELL_SIZE,
+                  top: y * BASE_CELL_SIZE,
+                  width: BASE_CELL_SIZE,
+                  height: BASE_CELL_SIZE,
                 }}
               />
             ))
           )}
-
-          {/* AGVs Layer */}
           {renderAGVs}
         </div>
       </div>
