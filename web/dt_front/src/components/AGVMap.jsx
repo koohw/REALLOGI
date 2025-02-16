@@ -222,7 +222,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
   };
 
   const getDirectionArrow = (direction) => {
-    return <Circle className="text-white" size={8} />;
+    return <Circle className="text-white" size={16} />;
   };
 
   const getAGVColor = (state) => {
@@ -321,7 +321,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
                   <div className="transform transition-transform duration-300">
                     {getDirectionArrow(agv.direction)}
                   </div>
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-1 py-0.2 rounded-full text-[8px] font-medium shadow-sm">
+                  <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-1 py-0.2 rounded-full text-[12px] font-medium shadow-sm">
                     {agv.agv_name}
                   </div>
                   {agv.issue && (
