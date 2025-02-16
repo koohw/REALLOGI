@@ -9,82 +9,66 @@ import statistics
 import heapq
 from simpy.rt import RealtimeEnvironment
 from simpy import Environment
-from collections import deque, defaultdict
-
+from collections import defaultdict
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
-
 import logging
 logger = logging.getLogger(__name__)
 
-# -----------------------------------------
-# 전역 설정 & 전역 변수
-# -----------------------------------------
 global_speed_factor = 1.0
 SIM_RUNNING = False
-SIM_DURATION = 3000  # 기본 종료 시각
+SIM_DURATION = 3000
 SIM_ENV = None
 SIM_STATS = None
 SIM_AGVS = []
 SIM_PAUSED = False
 PREVIOUS_SPEED = 1.0
-
 UPDATE_INTERVAL = 0.1
 SIM_FINISHED = False
 SIM_APP_RUNNING = False
-
 current_time_paused = None
 delivered_count_paused = None
-current_positions = []   # pause 시 저장된 위치 목록
-current_cargos = []      # pause 시 저장된 cargo 상태 목록
-current_paths = []       # pause 시 저장된 경로 목록
+current_positions = []
+current_cargos = []
+current_paths = []
 is_paused = False
-
-# 예약: (cell 좌표 -> AGV id)
 RESERVED_CELLS = {}
-# 추가: 목표(적재/하역) 예약: (cell 좌표 -> AGV id)
 TARGET_RESERVATIONS = {}
-
-# -----------------------------------------
-# 시뮬레이션 기본 상수
-# -----------------------------------------
-REPEAT_RUNS = 15   # 심층 분석 시 반복 횟수
+REPEAT_RUNS = 15
 WARMUP_PERIOD = 30
 CHECK_INTERVAL = 3000
 MOVE_RATE = 1.0
 STEP_SIZE = 0.01
 
-# 맵 정의 (12행×15열)
+# 15x15 불규칙 맵
 MAP = [
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0],
-    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # row4 (free)
-    [0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0],
-    [0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # row7 (free)
+    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0],
+    [0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0],
-    [0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0],
+    [0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
 ]
 ROWS = len(MAP)
 COLS = len(MAP[0])
 
-# 선반 위치를 지도 중앙부(행 4와 행 7)에 배치 (예: 3개씩)
-shelf_coords = [(4,4), (4,7), (4,10),
-                (7,4), (7,7), (7,10)]
+# 출구 구역: row0의 모든 셀
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
 
-# ─── 헬퍼 함수: 통로 영역 판별 ─────────────────────────────
+# 적재(선반) 구역: 맵 내부의 "들어간" 영역 (예: (3,3), (5,4), (3,12), (9,12), (8,6))
+shelf_coords = [(3,3), (5,4), (3,12), (9,12), (8,6)]
+
 def is_in_corridor(cell):
     row, col = cell
     return (2 <= row <= 4) and (2 <= col <= 4)
-# ─────────────────────────────────────────────────────
 
-# --- 추가: 다른 AGV가 해당 셀에서 적재/하역 중인지 체크하는 함수 ---
 def is_cell_busy(cell, required_cargo):
     for agv in SIM_AGVS:
         if (int(round(agv.pos[0])), int(round(agv.pos[1]))) == cell:
@@ -92,7 +76,6 @@ def is_cell_busy(cell, required_cargo):
                 return True
     return False
 
-# --- A* 경로 탐색 함수 (혼잡 및 예약 고려) ---
 def manhattan(a, b):
     return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
@@ -123,7 +106,6 @@ def a_star_path(start, goal, current_time, cell_blocked, congestion_count, curre
                 continue
             if neighbor in RESERVED_CELLS and current_agv_id is not None and RESERVED_CELLS[neighbor] != current_agv_id:
                 continue
-            # 기본 이동 비용 1, 추가 혼잡 비용: congestion_count를 약간 반영
             new_cost = cost_so_far[current] + 1 + 0.1 * congestion_count.get(neighbor, 0)
             if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
                 cost_so_far[neighbor] = new_cost
@@ -132,82 +114,67 @@ def a_star_path(start, goal, current_time, cell_blocked, congestion_count, curre
                 came_from[neighbor] = current
     return None
 
+# 시작지점: row 11, 열은 [0, 3, 6, 9, 12] (5대 기준)
+def get_start_position(i):
+    start_row = 11
+    start_cols = [0, 3, 6, 9, 12]
+    col = start_cols[i % len(start_cols)]
+    return (start_row, col)
+
+# 목적지 선정 함수 – 후보군에서 이미 낮은 ID가 예약한 좌표는 제외
+def find_nearest_exit(pos, current_agv_id=None):
+    if pos in exit_coords:
+        return pos
+    candidates = []
+    for ex in exit_coords:
+        if is_cell_busy(ex, 1):
+            continue
+        if ex in TARGET_RESERVATIONS:
+            reserved_id = TARGET_RESERVATIONS[ex]
+            # 이미 낮은 id가 예약한 경우 후보에서 제외
+            if reserved_id < current_agv_id:
+                continue
+        candidates.append(ex)
+    if candidates:
+        chosen = min(candidates, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
+        TARGET_RESERVATIONS[chosen] = current_agv_id
+        return chosen
+    else:
+        chosen = min(exit_coords, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
+        # 재할당: 낮은 id가 있다면 갱신
+        TARGET_RESERVATIONS[chosen] = current_agv_id
+        return chosen
+
+def find_nearest_shelf(pos, current_agv_id=None):
+    if pos in shelf_coords:
+        return pos
+    candidates = []
+    for sh in shelf_coords:
+        if is_cell_busy(sh, 0):
+            continue
+        if sh in TARGET_RESERVATIONS:
+            reserved_id = TARGET_RESERVATIONS[sh]
+            if reserved_id < current_agv_id:
+                continue
+        candidates.append(sh)
+    if candidates:
+        chosen = min(candidates, key=lambda s: abs(pos[0]-s[0]) + abs(pos[1]-s[1]))
+        TARGET_RESERVATIONS[chosen] = current_agv_id
+        return chosen
+    else:
+        chosen = min(shelf_coords, key=lambda s: abs(pos[0]-s[0]) + abs(pos[1]-s[1]))
+        TARGET_RESERVATIONS[chosen] = current_agv_id
+        return chosen
+
 def create_app(port):
     app = Flask(__name__)
     CORS(app)
-    socketio = SocketIO(app,
-                        cors_allowed_origins=["http://localhost:3000"],
-                        path='socket.io',
-                        async_mode='eventlet',
-                        logger=True,
-                        engineio_logger=True,
-                        ping_timeout=5000,
-                        ping_interval=2500)
-
-    # -----------------------------------------
-    # 경로 탐색 함수 선택 (여기서는 A* 사용)
-    # -----------------------------------------
-    # 기존 bfs_path 대신 a_star_path 사용
+    socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"],
+                          path='socket.io', async_mode='eventlet',
+                          logger=True, engineio_logger=True,
+                          ping_timeout=5000, ping_interval=2500)
     bfs_path = a_star_path
 
-    # --- 실시간 목표 재설계 함수 (목표 예약 포함) ---
-    def find_nearest_exit(pos, current_agv_id=None):
-        if pos in exit_coords:
-            return pos
-        available = []
-        for ex in exit_coords:
-            if is_cell_busy(ex, 1):
-                continue
-            if ex in TARGET_RESERVATIONS and TARGET_RESERVATIONS[ex] != current_agv_id:
-                other = next((a for a in SIM_AGVS if a.id == TARGET_RESERVATIONS[ex]), None)
-                d_current = abs(pos[0]-ex[0]) + abs(pos[1]-ex[1])
-                d_other = abs(other.pos[0]-ex[0]) + abs(other.pos[1]-ex[1]) if other else float('inf')
-                if d_current < d_other:
-                    TARGET_RESERVATIONS[ex] = current_agv_id
-                    available.append(ex)
-                else:
-                    continue
-            else:
-                available.append(ex)
-        if available:
-            chosen = min(available, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
-            TARGET_RESERVATIONS[chosen] = current_agv_id
-            return chosen
-        else:
-            chosen = min(exit_coords, key=lambda e: abs(pos[0]-e[0]) + abs(pos[1]-e[1]))
-            TARGET_RESERVATIONS[chosen] = current_agv_id
-            return chosen
-
-    def find_nearest_shelf(pos, current_agv_id=None):
-        if pos in shelf_coords:
-            return pos
-        available = []
-        for sh in shelf_coords:
-            if is_cell_busy(sh, 0):
-                continue
-            if sh in TARGET_RESERVATIONS and TARGET_RESERVATIONS[sh] != current_agv_id:
-                other = next((a for a in SIM_AGVS if a.id == TARGET_RESERVATIONS[sh]), None)
-                d_current = abs(pos[0]-sh[0]) + abs(pos[1]-sh[1])
-                d_other = abs(other.pos[0]-sh[0]) + abs(other.pos[1]-sh[1]) if other else float('inf')
-                if d_current < d_other:
-                    TARGET_RESERVATIONS[sh] = current_agv_id
-                    available.append(sh)
-                else:
-                    continue
-            else:
-                available.append(sh)
-        if available:
-            chosen = min(available, key=lambda s: abs(pos[0]-s[0]) + abs(pos[1]-s[1]))
-            TARGET_RESERVATIONS[chosen] = current_agv_id
-            return chosen
-        else:
-            chosen = min(shelf_coords, key=lambda s: abs(pos[0]-s[0]) + abs(pos[1]-s[1]))
-            TARGET_RESERVATIONS[chosen] = current_agv_id
-            return chosen
-
-    # -----------------------------------------
-    # AGV, Stats, Processes
-    # -----------------------------------------
     class AGV:
         def __init__(self, agv_id, start_pos):
             self.id = agv_id
@@ -225,13 +192,7 @@ def create_app(port):
             self.delivered_count = 0
             self.delivered_record = defaultdict(int)
             self.delivered_history = {}
-            self.agv_stats = defaultdict(lambda: {
-                "count": 0,
-                "times": [],
-                "wait_times": [],
-                "travel_times": [],
-                "location_log": []
-            })
+            self.agv_stats = defaultdict(lambda: {"count": 0, "times": [], "wait_times": [], "travel_times": [], "location_log": []})
 
     def compute_simulation_result(stats, sim_duration, agv_count):
         final_agv_stats = {}
@@ -240,35 +201,28 @@ def create_app(port):
             times = data["times"]
             avg_time = sum(times) / len(times) if times else 0
             utilization = sum(times) / sim_duration if sim_duration > 0 else 0
-            final_agv_stats[agv_id] = {
-                "count": count,
-                "times": times,
-                "avg_time": avg_time,
-                "wait_times": data["wait_times"],
-                "travel_times": data["travel_times"],
-                "location_log": data["location_log"],
-                "utilization": utilization
-            }
-        res = {
-            "end_time": sim_duration,
-            "delivered_count": stats.delivered_count,
-            "delivered_history": stats.delivered_history,
-            "delivered_record": dict(stats.delivered_record),
-            "agv_stats": final_agv_stats,
-            "agv_count": agv_count
-        }
+            final_agv_stats[agv_id] = {"count": count, "times": times, "avg_time": avg_time,
+                                       "wait_times": data["wait_times"], "travel_times": data["travel_times"],
+                                       "location_log": data["location_log"], "utilization": utilization}
+        res = {"end_time": sim_duration, "delivered_count": stats.delivered_count,
+               "delivered_history": stats.delivered_history, "delivered_record": dict(stats.delivered_record),
+               "agv_stats": final_agv_stats, "agv_count": agv_count}
         delivered_counts = res["delivered_count"]
         throughput = delivered_counts / sim_duration * 3600
         delivered_per_agv = delivered_counts / agv_count
-        result = {
-            "throughput_per_hour": throughput,
-            "delivered_per_agv": delivered_per_agv,
-            "avg_cycle": statistics.mean([d["avg_time"] for d in final_agv_stats.values()]) if final_agv_stats else 0,
-            "avg_wait": statistics.mean([statistics.mean(d["wait_times"]) if d["wait_times"] else 0 for d in final_agv_stats.values()]),
-            "avg_travel": statistics.mean([statistics.mean(d["travel_times"]) if d["travel_times"] else 0 for d in final_agv_stats.values()])
-        }
+        result = {"throughput_per_hour": throughput, "delivered_per_agv": delivered_per_agv,
+                  "avg_cycle": statistics.mean([d["avg_time"] for d in final_agv_stats.values()]) if final_agv_stats else 0,
+                  "avg_wait": statistics.mean([statistics.mean(d["wait_times"]) if d["wait_times"] else 0 for d in final_agv_stats.values()]),
+                  "avg_travel": statistics.mean([statistics.mean(d["travel_times"]) if d["travel_times"] else 0 for d in final_agv_stats.values()])}
         res.update(result)
         return res
+
+    def compute_single_run_result(stats, sim_duration, agv_count):
+        base = compute_simulation_result(stats, sim_duration, agv_count)
+        return {"end_time": base["end_time"], "delivered_count": base["delivered_count"],
+                "throughput_per_hour": base["throughput_per_hour"], "delivered_per_agv": base["delivered_per_agv"],
+                "avg_cycle": base["avg_cycle"], "avg_wait": base["avg_wait"],
+                "avg_travel": base["avg_travel"], "analysis_type": "single"}
 
     def do_pick(agv, env, stats, cell_blocked):
         now = env.now
@@ -321,6 +275,8 @@ def create_app(port):
             env.process(agv_process(agv, env, stats, SIM_DURATION, cell_blocked))
         env.process(record_stats(env, SIM_DURATION, stats))
         env.process(record_interval_stats(env, SIM_DURATION, stats))
+        if env.now >= SIM_DURATION - 1:
+            SIM_DURATION = env.now + 3000
         SIM_ENV = env
         SIM_STATS = stats
         SIM_AGVS = new_agvs
@@ -341,24 +297,39 @@ def create_app(port):
             result = compute_simulation_result(SIM_STATS, sim_duration, agv_count)
             socketio.emit('simulation_final', result)
 
-    # AGV 프로세스 – stuck 체크 및 충돌(겹침)과 busy 지역 회피
     def agv_process(agv, env, stats, sim_duration, cell_blocked):
         while env.now < sim_duration:
-            # stuck 체크: 이전 위치와 비교하여 변화가 없으면 stuck_steps 증가
+            # 동적 목적지 재할당: 만약 이미 정해진 경로의 최종 목적지(dest)가 TARGET_RESERVATIONS에 등록되어 있고, 
+            # 그 예약이 자신보다 낮은(우선순위 높은) AGV에 의한 것이라면 재할당
+            current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
+            if agv.path:
+                dest = agv.path[-1]
+                if dest in TARGET_RESERVATIONS:
+                    if TARGET_RESERVATIONS[dest] < agv.id:
+                        # 다른 AGV(우선순위 높음)가 해당 목적지를 예약한 상태이므로 재할당
+                        if agv.cargo == 0:
+                            new_target = find_nearest_shelf(current_cell, agv.id)
+                        else:
+                            new_target = find_nearest_exit(current_cell, agv.id)
+                        new_path = bfs_path(current_cell, new_target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
+                        if new_path and len(new_path) > 1:
+                            agv.path = new_path
+                        else:
+                            agv.path = []
+                    else:
+                        TARGET_RESERVATIONS[dest] = agv.id
+
             if abs(agv.pos[0] - agv.last_pos[0]) < 0.001 and abs(agv.pos[1] - agv.last_pos[1]) < 0.001:
                 agv.stuck_steps += 1
             else:
                 agv.stuck_steps = 0
             agv.last_pos = agv.pos
-            # 50회 이상 연속 변화 없으면 경로 재계획 및 현재 셀 예약
             if agv.stuck_steps > 50:
                 agv.path = []
                 current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
                 RESERVED_CELLS[current_cell] = agv.id
-
             current_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
-
-            # cargo==1이고 현재 셀이 출구면 출구로 향하게 함.
+            # 하역: cargo==1이면 출구로 이동
             if agv.cargo == 1 and current_cell in exit_coords:
                 available_exit = find_nearest_exit(current_cell, agv.id)
                 if available_exit != current_cell:
@@ -367,10 +338,17 @@ def create_app(port):
                         agv.path = new_path
                     yield env.timeout(0.1)
                     continue
-
-            # cargo==0인 경우: 선반 셀에 도착하면 적재 진행
+            # 적재: cargo==0이고 현재 위치가 적재 구역
             if agv.cargo == 0 and current_cell in shelf_coords:
-                # 선반 셀에 도착하면 바로 적재 후 출구로 경로 재설계
+                busy = any(other.id != agv.id and (int(round(other.pos[0])), int(round(other.pos[1]))) == current_cell and other.cargo == 0 for other in SIM_AGVS)
+                if busy:
+                    new_target = find_nearest_shelf(current_cell, agv.id)
+                    if new_target != current_cell:
+                        new_path = bfs_path(current_cell, new_target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
+                        if new_path and len(new_path) > 1:
+                            agv.path = new_path
+                        yield env.timeout(0.1)
+                        continue
                 yield env.process(do_pick(agv, env, stats, cell_blocked))
                 target = find_nearest_exit(current_cell, agv.id)
                 new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
@@ -378,7 +356,6 @@ def create_app(port):
                     agv.path = new_path
                 yield env.timeout(random.uniform(0.5, 1.5))
                 continue
-
             if not agv.path or len(agv.path) <= 1:
                 if agv.cargo == 0:
                     target = find_nearest_shelf(current_cell, agv.id)
@@ -388,41 +365,26 @@ def create_app(port):
                     target = find_nearest_exit(current_cell, agv.id)
                     path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
                     agv.path = path if path is not None else []
-
             if len(agv.path) > 1:
                 next_cell = agv.path[1]
-                # 다른 AGV가 해당 셀에 있거나 예약되어 있으면 재경로
                 occupied_cells = {(int(round(other.pos[0])), int(round(other.pos[1]))) for other in SIM_AGVS if other.id != agv.id}
                 if next_cell in occupied_cells or (next_cell in RESERVED_CELLS and RESERVED_CELLS[next_cell] != agv.id):
-                    if agv.cargo == 0:
-                        target = find_nearest_shelf(current_cell, agv.id)
-                    else:
-                        target = find_nearest_exit(current_cell, agv.id)
-                    new_path = bfs_path(current_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
-                    if new_path and len(new_path) > 1:
-                        agv.path = new_path
-                        next_cell = agv.path[1]
-                    else:
-                        yield env.timeout(0.1)
-                        continue
-
+                    yield env.timeout(random.uniform(0.1, 0.3))
+                    continue
                 if next_cell not in RESERVED_CELLS:
                     RESERVED_CELLS[next_cell] = agv.id
-
                 current_pos = agv.pos
                 dx = next_cell[0] - current_pos[0]
                 dy = next_cell[1] - current_pos[1]
                 distance = (dx**2 + dy**2)**0.5
                 num_steps = int(distance / STEP_SIZE)
                 for _ in range(num_steps):
-                    current_pos = (current_pos[0] + STEP_SIZE * dx / distance,
-                                   current_pos[1] + STEP_SIZE * dy / distance)
+                    current_pos = (current_pos[0] + STEP_SIZE * dx / distance, current_pos[1] + STEP_SIZE * dy / distance)
                     yield env.timeout(STEP_SIZE)
                     agv.pos = current_pos
                 remaining = distance - num_steps * STEP_SIZE
                 if remaining > 0:
-                    current_pos = (current_pos[0] + remaining * dx / distance,
-                                   current_pos[1] + remaining * dy / distance)
+                    current_pos = (current_pos[0] + remaining * dx / distance, current_pos[1] + remaining * dy / distance)
                     yield env.timeout(remaining)
                     agv.pos = current_pos
                 agv.pos = (float(next_cell[0]), float(next_cell[1]))
@@ -432,17 +394,17 @@ def create_app(port):
                 agv.path.pop(0)
             else:
                 yield env.timeout(0.1)
-
             current_int_cell = (int(round(agv.pos[0])), int(round(agv.pos[1])))
-            # cargo==0, 선반 셀이면 적재 후 출구로 재경로
             if agv.cargo == 0 and current_int_cell in shelf_coords:
-                available_shelf = find_nearest_shelf(current_int_cell, agv.id)
-                if available_shelf != current_int_cell:
-                    new_path = bfs_path(current_int_cell, available_shelf, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
-                    if new_path and len(new_path) > 1:
-                        agv.path = new_path
-                    yield env.timeout(0.1)
-                    continue
+                busy = any(other.id != agv.id and (int(round(other.pos[0])), int(round(other.pos[1]))) == current_int_cell and other.cargo == 0 for other in SIM_AGVS)
+                if busy:
+                    new_target = find_nearest_shelf(current_int_cell, agv.id)
+                    if new_target != current_int_cell:
+                        new_path = bfs_path(current_int_cell, new_target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
+                        if new_path and len(new_path) > 1:
+                            agv.path = new_path
+                        yield env.timeout(0.1)
+                        continue
                 yield env.process(do_pick(agv, env, stats, cell_blocked))
                 target = find_nearest_exit(current_int_cell, agv.id)
                 new_path = bfs_path(current_int_cell, target, env.now, cell_blocked, defaultdict(int), current_agv_id=agv.id)
@@ -463,7 +425,6 @@ def create_app(port):
                 if new_path and len(new_path) > 1:
                     agv.path = new_path
                 yield env.timeout(random.uniform(0.5, 1.5))
-        # end while
 
     def record_stats(env, sim_duration, stats):
         while env.now < sim_duration:
@@ -488,14 +449,11 @@ def create_app(port):
         env = RealtimeEnvironment(factor=1)
         stats = Stats()
         agvs = []
-        start_row = 10
-        start_cols = [0, 3, 6, 9, 12]
-        cell_blocked = {}
         for i in range(agv_count):
-            pos = (start_row, start_cols[i % len(start_cols)])
+            pos = get_start_position(i)
             agv = AGV(i, pos)
             agvs.append(agv)
-            env.process(agv_process(agv, env, stats, sim_duration, cell_blocked))
+            env.process(agv_process(agv, env, stats, sim_duration, {}))
         env.process(record_stats(env, sim_duration, stats))
         env.process(record_interval_stats(env, sim_duration, stats))
         SIM_ENV = env
@@ -505,22 +463,19 @@ def create_app(port):
         SIM_RUNNING = False
         SIM_FINISHED = True
         print("시뮬레이션 종료")
-        result = compute_simulation_result(stats, sim_duration, agv_count)
+        result = compute_single_run_result(stats, sim_duration, agv_count)
         socketio.emit('simulation_final', result)
 
     def run_one_sim_analysis(agv_count, sim_duration):
         env = Environment()
-        cell_blocked = {}
         stats = Stats()
         agvs = []
-        start_row = 10
-        start_cols = [0, 3, 6, 9, 12]
         for i in range(agv_count):
-            pos = (start_row, start_cols[i % len(start_cols)])
+            pos = get_start_position(i)
             agv = AGV(i, pos)
             agvs.append(agv)
         for agv in agvs:
-            env.process(agv_process(agv, env, stats, sim_duration, cell_blocked))
+            env.process(agv_process(agv, env, stats, sim_duration, {}))
         env.process(record_stats(env, sim_duration, stats))
         env.process(record_interval_stats(env, sim_duration, stats))
         env.run(until=sim_duration)
@@ -545,18 +500,10 @@ def create_app(port):
                 vals = [data.get("utilization", 0) for data in r["agv_stats"].values()]
                 util_list.append(statistics.mean(vals))
         avg_util = statistics.mean(util_list) if util_list else 0
-        avg_result = {
-            "repeat_runs": repeat_runs,
-            "agv_count": agv_count,
-            "throughput_per_hour": avg_throughput,
-            "std_throughput_per_hour": std_throughput,
-            "delivered_per_agv": avg_delivered,
-            "std_delivered_per_agv": std_delivered,
-            "avg_cycle": avg_cycle,
-            "avg_wait": avg_wait,
-            "avg_travel": avg_travel,
-            "avg_utilization": avg_util
-        }
+        avg_result = {"repeat_runs": repeat_runs, "agv_count": agv_count, "throughput_per_hour": avg_throughput,
+                      "std_throughput_per_hour": std_throughput, "delivered_per_agv": avg_delivered,
+                      "std_delivered_per_agv": std_delivered, "avg_cycle": avg_cycle, "avg_wait": avg_wait,
+                      "avg_travel": avg_travel, "avg_utilization": avg_util, "analysis_type": "deep"}
         return avg_result
 
     def analysis_worker(agv_count, sim_duration, repeat_runs, output_queue):
