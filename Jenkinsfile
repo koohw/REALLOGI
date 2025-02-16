@@ -19,14 +19,10 @@ pipeline {
             }
         }
 
-        stage('Update Services') {
+        stage('Update Stack') {
             steps {
                 script {
-                    // 백엔드 서비스 업데이트
-                    sh 'docker service update --image springboot-app:latest dt-stack_springboot --with-registry-auth'
-                    
-                    // 프론트엔드 서비스 업데이트
-                    sh 'docker service update --image react-app:latest dt-stack_react --with-registry-auth'
+                    sh 'docker stack deploy --with-registry-auth dt-stack --resolve-image always'
                 }
             }
         }
