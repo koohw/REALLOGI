@@ -6,19 +6,41 @@ import paho.mqtt.client as mqtt
 import json
 import smbus
 import math
+import RPi.GPIO as GPIO
 
-try:
-    import smbus
-except ImportError:
-    from smbus2 import SMBus
+# 초음파 센서 설정
+GPIO.setmode(GPIO.BOARD)
+TRIG = 7
+ECHO = 15
+GPIO.setup(TRIG, GPIO.OUT)
+GPIO.setup(ECHO, GPIO.IN)
+
+def get_distance():
+    GPIO.output(TRIG, False)
+    time.sleep(0.1)
+    GPIO.output(TRIG, True)
+    time.sleep(0.00001)
+    GPIO.output(TRIG, False)
+    pulse_start = time.time()
+    pulse_end = time.time()
+    while GPIO.input(ECHO) == 0:
+        pulse_start = time.time()
+    while GPIO.input(ECHO) == 1:
+        pulse_end = time.time()
+    pulse_duration = pulse_end - pulse_start
+    distance = pulse_duration * 17150
+    distance = round(distance, 2)
+    return distance
 
 # MQTT 설정
 BROKER = "broker.hivemq.com"
 PORT = 1883
 TOPIC_QR_INFO = "agv/qr_info"         # QR 감지 시 정보 전송
 TOPIC_SIMPY_TO_AGV = "simpy/commands"
+TOPIC_OBSTACLE = "agv/obstacle"       # 장애물 감지 시 정보 전송
 
 mqtt_received_path = []  # MQTT로 받은 전체 경로 리스트
+mqtt_received_command = None # MQTT로 받은 원격 명령 (STOP, RESUME, TURN)
 
 def on_connect(client, userdata, flags, rc):
     print("[MQTT] on_connect rc =", rc)
@@ -26,14 +48,19 @@ def on_connect(client, userdata, flags, rc):
     print(f"[MQTT] Subscribed to topic: {TOPIC_SIMPY_TO_AGV}")
 
 def on_message(client, userdata, msg):
-    global mqtt_received_path
+    global mqtt_received_path, mqtt_received_command
     try:
         payload = json.loads(msg.payload.decode())
         cmd = payload.get('command')
         if cmd == 'STOP':
             print("[MQTT] AGV 정지 명령 수신")
+            mqtt_received_command = 'STOP'
         elif cmd == 'RESUME':
             print("[MQTT] AGV 재시작 명령 수신")
+            mqtt_received_command = 'RESUME'
+        elif cmd == 'TURN':
+            print("[MQTT] AGV 회전 명령 수신")
+            mqtt_received_command = 'TURN'
         elif cmd == 'PATH':
             full_path = payload.get('data', {}).get('full_path', [])
             print("[MQTT] PATH 명령 수신 =", full_path)
@@ -49,7 +76,6 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(BROKER, PORT, 60)
 mqtt_client.loop_start()
 
-
 # --- 모터 제어 클래스 ---
 class MotorDriver:
     def __init__(self):
@@ -63,6 +89,7 @@ class MotorDriver:
         self.pwm.setPWMFreq(50)
 
     def MotorRun(self, motor, direction, speed):
+        speed = min(speed, 100)
         if speed > 100:
             speed = 100
         if motor == 0:  # 왼쪽 모터
@@ -93,23 +120,20 @@ class MotorDriver:
             self.pwm.setDutycycle(self.PWMB, 0)
 
 # --- PID 컨트롤러 클래스 ---
-# 라인 트래킹 시 발생하는 오차를 보정하여 모터의 속도 차이를 조절함.
 class PID:
     def __init__(self, kp, ki, kd):
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        self.prev_error = 0 # 이전 오차 누적
-        self.integral = 0   # 적분값 누적
+        self.prev_error = 0
+        self.integral = 0
 
     def update(self, error, dt):
         self.integral += error * dt
         derivative = (error - self.prev_error) / dt if dt > 0 else 0
-        output = self.kp * error + self.ki * self.integral + self.kd * derivative   # 보정값값
-        self.prev_error = error # 이전 오차값 갱신.
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        self.prev_error = error
         return output
-
-# 가속도계 센서 코드 싹 다 뻄 (칼만필터, MPU6050)
 
 # --- 빨간색 라인 검출 함수 ---
 lower_red1 = np.array([0, 100, 100])
@@ -144,11 +168,19 @@ def detect_qr_code(frame):
         pts = points[0]
         cx = int(np.mean(pts[:, 0]))
         cy = int(np.mean(pts[:, 1]))
-        return True, (cx, cy), data # 검출 성공 시
-    return False, None, None    # 검출 실패 시
+        return True, (cx, cy), data
+    return False, None, None
 
+# 회전 함수
+def rotate_90_degrees(motor):
+    motor.MotorRun(0, 'forward', 50)
+    motor.MotorRun(1, 'backward', 50)
+    time.sleep(1)  # 90도 회전에 필요한 시간 조정
+    motor.MotorStop() 
 
+# 메인함수 
 def line_following_with_qr():
+    global mqtt_received_command, mqtt_received_path
     motor = MotorDriver()
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -169,64 +201,110 @@ def line_following_with_qr():
 
     # PID 및 속도 설정
     pid = PID(kp=0.1, ki=0.0, kd=0.01)
-    original_speed = 40  # 출발지 QR 인식 후 초기 목표 속도 (예: 40 cm/s)
-    slow_speed = 8        # QR 감지 시 감속 속도 8
+    original_speed = 40 # cm/s
+    slow_speed = 8      # 감속 시 속도 
     target_speed = original_speed
     prev_time = time.time()
     prev_correction = 0
 
-    
     # 상태 정의
-    STATE_WAIT_START = 0   # 출발지 QR 코드 대기
-    STATE_ACTIVE     = 1   # QR 인식 후 라인트래킹(항상 수행) 상태
-    STATE_STOP       = 2   # 라인트래킹 중 QR 감지 시 정지 및 명령 대기
+    STATE_WAIT_START = 0 # MQTT 통신 완료 전 대기 (출발지 QR 없앰)
+    STATE_ACTIVE     = 1
+    STATE_STOP       = 2
     state = STATE_WAIT_START
-    start_active_time = None  # 활성 상태 시작 시각(거리 측정을 위한 기준)
+    start_active_time = None
+    distance_traveled = 0
+
+    # 디버깅용 코드. 마지막 거리 출력 시각
+    last_distance_print = time.time()
 
     try:
-        # 메인 루프 
         while True:
             current_time = time.time()
             dt = current_time - prev_time
             prev_time = current_time
 
+            # 초음파 센서로 1초마다 거리 측정
+            distance = get_distance()
+            if current_time - last_distance_print >= 1.0:
+                print(f"[DEBUG] 초음파 센서 측정 거리: {distance} cm")
+                last_distance_print = current_time
+
+            # 30cm 이내 물체 감지 시 이상 물체로 판단.
+            # 모터 정지 및 MQTT 전송 
+            if distance < 30:
+                print("이상 물체가 감지됩니다. 카메라를 확인해주세요.")
+                motor.MotorStop()
+                mqtt_client.publish(TOPIC_OBSTACLE, json.dumps({"distance": distance}))
+                time.sleep(1)
+                continue
+
             ret, frame = cap.read()
             if not ret:
                 print("프레임 읽기 실패")
                 break
-
-            # 상태별 동작 분기
-            if state == STATE_WAIT_START:
-                # 출발지 QR 인식 대기
-                qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
-                cv2.putText(frame, "Waiting for Start QR", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                motor.MotorStop()
-                if qr_detected:
-                    print("출발지 QR 코드 감지 – 활성 상태 전환 (라인트래킹 시작)")
-                    state = STATE_ACTIVE
-                    start_active_time = current_time  # 활성 상태 시작 시간 기록
-
-            elif state == STATE_ACTIVE:
-                # 누적 이동거리에 따라 목표 속도 변경
-                if distance_traveled < 160:
-                    target_speed = original_speed
-                else:
-                    target_speed = 8
-
-                # 라인트래킹 도중 QR 코드가 감지되면 정지 및 STATE_STOP 전환
-                qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
-                if qr_detected:
-                    print("라인트래킹 중 QR 코드 감지 – 정지 및 명령 대기")
+            
+            # MQTT 원격 명령 처리 (STOP, RESUME, TURN)
+            if mqtt_received_command is not None:
+                if mqtt_received_command == 'STOP':
+                    print("Remote STOP 명령 실행")
                     motor.MotorStop()
                     state = STATE_STOP
-                    # MQTT로 QR 정보 전송
+                    mqtt_received_command = None
+                    # 원격 정지 시, 화면에 상태 표시 후 다음 루프로
+                    cv2.putText(frame, "REMOTE STOP", (10, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.imshow("Frame", frame)
+                    cv2.waitKey(1)
+                    continue
+
+                elif mqtt_received_command == 'RESUME':
+                        print("Remote RESUME 명령 실행")
+                        state = STATE_ACTIVE
+                        if start_active_time is None:
+                            start_active_time = current_time
+                        mqtt_received_command = None
+                
+                elif mqtt_received_command == 'TURN':
+                        print("Remote TURN 명령 실행")
+                        motor.MotorStop()
+                        rotate_90_degrees(motor)
+                        mqtt_received_command = None
+
+            # 상태에 따른 동작 처리 
+            if state == STATE_WAIT_START:
+                    # MQTT 통신이 완료되면 바로 라인트래킹 시작
+                    if mqtt_received_path:
+                        print("MQTT 통신 완료 – 활성 상태 전환 (라인트래킹 시작)")
+                        state = STATE_ACTIVE
+                        start_active_time = current_time
+                    else:
+                        cv2.putText(frame, "Waiting for MQTT", (10, 30),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        motor.MotorStop()
+
+            elif state == STATE_ACTIVE:
+                # 이동 거리 (근사: 전진 속도 * 시간)
+                distance_traveled = (current_time - start_active_time) * original_speed
+                # 50cm 미만이면 기본 속도, 그 이상이면 감속
+                if distance_traveled < 50:
+                    target_speed = original_speed
+                else:
+                    target_speed = slow_speed
+
+                # QR 코드 검출 (50cm 이상 이동하면 90도 회전)
+                qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
+                if qr_detected and distance_traveled >= 50:
+                    print("50cm 이동 후 QR 코드 감지 – 90도 회전")
+                    motor.MotorStop()
+                    rotate_90_degrees(motor)
+                    state = STATE_STOP
                     qr_info = {"position": qr_centroid, "data": qr_data}
                     mqtt_client.publish(TOPIC_QR_INFO, json.dumps(qr_info))
                     time.sleep(1)
                     continue
-
-                # 빨간색 라인 검출 및 PID 보정
+                
+                # 빨간색 라인 검출 및 PID 제어
                 detected, centroid, mask = detect_red_line(frame)
                 if detected and centroid is not None:
                     cx, cy = centroid
@@ -237,15 +315,12 @@ def line_following_with_qr():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     error = cx - frame_center
                     correction = pid.update(error, dt)
-                    # 보정값의 급격한 변화 제한
                     max_delta = 2
                     delta = correction - prev_correction
                     if abs(delta) > max_delta:
                         correction = prev_correction + max_delta * np.sign(delta)
                     prev_correction = correction
 
-                    # 두 모터 모두 전진시키되, 속도 차이를 통해 회전 보정  
-                    # (최소 속도(min_speed)를 유지하여 한쪽 모터가 거의 멈추지 않도록 함)
                     min_speed = 4
                     left_speed = target_speed + correction
                     right_speed = target_speed - correction
@@ -258,7 +333,6 @@ def line_following_with_qr():
                                 (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     print(f"[ACTIVE] error: {error:.2f}, correction: {correction:.2f}, L: {left_speed:.1f}, R: {right_speed:.1f}")
                 else:
-                    # 라인 미검출 시 이전 보정값을 서서히 감쇠하며 전진
                     prev_correction *= 0.9
                     left_speed = target_speed + prev_correction
                     right_speed = target_speed - prev_correction
@@ -268,20 +342,18 @@ def line_following_with_qr():
                     motor.MotorRun(1, 'forward', right_speed)
                     cv2.putText(frame, "Line not detected", (10, 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                
+                # 현재 속도 표시 (카메라 화면에 출력)
+                cv2.putText(frame, f"Speed: {target_speed} cm/s", (10, 120),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
             elif state == STATE_STOP:
-                # 정지 상태: 모터 정지 후 명령 대기 (여기서는 input()으로 RESUME 명령 수신)
                 motor.MotorStop()
                 cv2.putText(frame, "Stopped, waiting for command", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                # 원격 정지 시, 별도의 입력 대기 루틴 없이 MQTT로 RESUME 명령을 받으면 재시작
                 print("정지 상태: 명령을 입력하세요 (RESUME 입력 시 재시작):")
-                cmd = input()
-                if cmd.strip().upper() == "RESUME":
-                    print("재시작 명령 수신 – 활성 상태로 전환")
-                    state = STATE_ACTIVE
-                    start_active_time = time.time()  # 이동거리 기준 초기화
-                else:
-                    print("알 수 없는 명령. 계속 정지합니다.")
+        
 
             cv2.imshow("Frame", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -293,6 +365,7 @@ def line_following_with_qr():
         motor.MotorStop()
         cap.release()
         cv2.destroyAllWindows()
+        GPIO.cleanup()
 
 if __name__ == '__main__':
     line_following_with_qr()
