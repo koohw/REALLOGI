@@ -19,12 +19,14 @@ pipeline {
             }
         }
 
-        stage('Update Stack Services') {
+        stage('Redeploy Stack') {
             steps {
-                script {
-                    // 백엔드와 프론트엔드 서비스 강제 업데이트
-                    sh 'docker service update --image springboot-app:latest --force dt-stack_springboot'
-                    sh 'docker service update --image react-app:latest --force dt-stack_react'
+                configFileProvider([configFile(fileId: 'docker-compose-config', targetLocation: 'docker-compose.yml')]) {
+                    script {
+                        sh 'docker stack rm dt-stack'
+                        sh 'sleep 10'
+                        sh 'docker stack deploy -c docker-compose.yml dt-stack --with-registry-auth'
+                    }
                 }
             }
         }
