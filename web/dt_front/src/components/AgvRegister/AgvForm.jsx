@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../../hooks/useAuth";
 
+const baseUrl = process.env.REACT_APP_API_URL ;
+
+
 export default function AgvForm({ onSubmit }) {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -11,8 +14,7 @@ export default function AgvForm({ onSubmit }) {
     agvFootnote: "",
     warehouseId: "",
   });
-
-  const baseUrl = process.env.REACT_APP_API_URL ;
+  
   
 
   useEffect(() => {
