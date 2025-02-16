@@ -23,8 +23,13 @@ pipeline {
             steps {
                 configFileProvider([configFile(fileId: 'docker-compose-config', targetLocation: 'docker-compose.yml')]) {
                     script {
+                        // 기존 스택 제거
                         sh 'docker stack rm dt-stack'
-                        sh 'sleep 10'
+                        // 기존 네트워크 제거
+                        sh 'docker network rm dt-stack_dt-stack-network || true'
+                        // 충분한 대기 시간
+                        sh 'sleep 15'
+                        // 새로운 스택 배포
                         sh 'docker stack deploy -c docker-compose.yml dt-stack --with-registry-auth'
                     }
                 }
