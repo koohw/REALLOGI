@@ -18,5 +18,12 @@ pipeline {
                 }
             }
         }
+
+        stage('Update Stack') {
+            steps {
+                // 기존 스택 업데이트
+                sh 'docker stack deploy -c docker-compose.yml dt-stack --with-registry-auth'
+            }
+        }
     }
 }
