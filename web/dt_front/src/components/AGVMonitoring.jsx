@@ -362,7 +362,12 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                   width: BASE_CELL_SIZE,
                   height: BASE_CELL_SIZE,
                 }}
-              />
+                className="flex items-center justify-center"
+              >
+                {cell === 0 && (
+                  <div className="w-1 h-1 bg-gray-500 opacity-70 rounded-full" />
+                )}
+              </div>
             ))
           )}
           {renderAGVs}

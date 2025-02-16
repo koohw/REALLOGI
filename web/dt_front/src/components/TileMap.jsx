@@ -35,7 +35,6 @@ const TileMap = ({ mapData, cellSize }) => {
 
   return (
     <div className="absolute top-0 left-0 w-full h-full bg-[#11263f]">
-      {" "}
       {/* 전체 배경색 추가 */}
       {mapData.map((row, y) => (
         <div key={`row-${y}`} className="flex" style={{ height: cellSize }}>
@@ -43,8 +42,12 @@ const TileMap = ({ mapData, cellSize }) => {
             <div
               key={`cell-${x}-${y}`}
               style={getCellStyle(cell)}
-              className="" // 셀 구분선 추가
-            />
+              className="flex items-center justify-center"
+            >
+              {cell === 0 && (
+                <div className="w-0.5 h-0.5 bg-gray-500 opacity-70 rounded-full" />
+              )}
+            </div>
           ))}
         </div>
       ))}
