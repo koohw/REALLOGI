@@ -384,60 +384,108 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
               ✕
             </button>
             <div className="w-full h-full p-4">
-              <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">처리량</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.throughput_per_hour.toFixed(1)}건/시간
-                  </span>
+              {analysisResult.analysis_type === "single" ? (
+                // 시뮬레이션 결과 (single 타입)
+                <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">시간당 처리량</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.throughput_per_hour.toFixed(1)}건/시간
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">AGV당 배송량</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.delivered_per_agv.toFixed(1)}건
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">평균 사이클 타임</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.avg_cycle.toFixed(1)}초
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">평균 대기 시간</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.avg_wait.toFixed(1)}초
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">평균 이동 시간</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.avg_travel.toFixed(1)}초
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">총 배송 수</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.delivered_count}건
+                    </span>
+                  </div>
+                  {/* 남은 셀은 비워두거나 추가 정보를 넣을 수 있습니다 */}
+                  <div className="bg-[#0D1B2A] p-2 border border-gray-700"></div>
+                  <div className="bg-[#0D1B2A] p-2 border border-gray-700"></div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">전체 결과</span>
+                  </div>
                 </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">배송량</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.delivered_per_agv.toFixed(1)}건
-                  </span>
+              ) : (
+                // AGV 운영 통계 (single 타입이 아닐 때)
+                <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">시간당 처리량</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.throughput_per_hour.toFixed(1)}건/시간
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">AGV당 배송량</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.delivered_per_agv.toFixed(1)}건
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">평균 사이클 타임</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.avg_cycle.toFixed(1)}초
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">AGV 수</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.agv_count}대
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">처리량 표준편차</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.std_throughput_per_hour.toFixed(1)}건/시간
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">배송량 표준편차</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.std_delivered_per_agv.toFixed(1)}건
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">총 반복실험 횟수</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.repeat_runs}회
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">평균 AGV 가동률</span>
+                    <span className="font-semibold text-gray-200 text-base">
+                      {analysisResult.avg_utilization.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                    <span className="text-gray-400 text-xs">전체 결과</span>
+                  </div>
                 </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">사이클</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.avg_cycle.toFixed(1)}초
-                  </span>
-                </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">AGV 수</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.agv_count}대
-                  </span>
-                </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">처리 표준편차</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.std_throughput_per_hour.toFixed(1)}건/시간
-                  </span>
-                </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">배송 표준편차</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.std_delivered_per_agv.toFixed(1)}건
-                  </span>
-                </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">반복 횟수</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.repeat_runs}회
-                  </span>
-                </div>
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">가동률</span>
-                  <span className="font-semibold text-gray-200 text-base">
-                    {analysisResult.avg_utilization.toFixed(2)}
-                  </span>
-                </div>
-                {/* 9번째 칸은 추가 정보를 넣거나 비워둘 수 있습니다 */}
-                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                  <span className="text-gray-400 text-xs">전체 결과</span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}
