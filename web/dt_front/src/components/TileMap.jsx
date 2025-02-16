@@ -45,7 +45,7 @@ const TileMap = ({ mapData, cellSize }) => {
               className="flex items-center justify-center"
             >
               {cell === 0 && (
-                <div className="w-0.5 h-0.5 bg-gray-500 opacity-70 rounded-full" />
+                <div className="w-1 h-1 bg-gray-500 opacity-70 rounded-full" />
               )}
             </div>
           ))}

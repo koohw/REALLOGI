@@ -13,7 +13,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [lastUpdate, setLastUpdate] = useState("");
   const agvPositions = useRef(new Map());
-  const cellSize = 25;
+  const cellSize = 50;
 
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
