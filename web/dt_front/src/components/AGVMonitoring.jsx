@@ -256,8 +256,8 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     if (!agvData.agvs?.length) return null;
 
     return agvData.agvs.map((agv) => {
-      const x = agv.location_y * CELL_SIZE;
-      const y = agv.location_x * CELL_SIZE;
+      const x = agv.location_y * BASE_CELL_SIZE;
+      const y = agv.location_x * BASE_CELL_SIZE;
 
       return (
         <div
@@ -266,10 +266,9 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
           style={{
             left: `${x}px`,
             top: `${y}px`,
-            width: `${CELL_SIZE}px`,
-            height: `${CELL_SIZE}px`,
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
+            width: `${BASE_CELL_SIZE}px`,
+            height: `${BASE_CELL_SIZE}px`,
+            // Removed extra scaling here
           }}
         >
           <div
@@ -292,7 +291,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         </div>
       );
     });
-  }, [agvData, CELL_SIZE, scale]);
+  }, [agvData, BASE_CELL_SIZE]);
   return (
     <div className="p-3 border border-gray-700 rounded-lg bg-[#11263f] shadow-lg">
       {/* Controls Row */}
