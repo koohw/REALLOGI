@@ -1,9 +1,27 @@
+# 2025-02-16
+1. VNC 원격 모니터링 완료
+```
+sudo apt-get update
+sudo apt-get install x11vnc
+x11vnc -display :0 -auth guess -forever
+
+/usr/lib/vino/vino-server # vnc 실행
+```
+![VNC 원격 화면](image-1.png)
+2. 하드웨어 보수 작업 끝난 상태에서 주행테스트
+![하드웨어 완료 후 주행](KakaoTalk_20250217_001414703.jpg)
+3. 최종 회로도
+![회로도 사진](KakaoTalk_20250216_210257993_03.jpg) ![회로도 사진](KakaoTalk_20250216_210257993.jpg) ![회로도 사진](KakaoTalk_20250216_210257993_01.jpg)
+4. mqtt 통신 후 주행 
+![mqtt 경로 받는 화면](image-2.png)
+-> 경로는 받는데 라인트레이싱이 제대로 안됨.
+-> mqtt 통신 전까지 올 스탑. 통신 후부터 돌발상황감지, 라인트레이싱 실시
 # 2025-02-12
 1. 직선 주행 테스트
 -> 현재위치를 mqtt로 전송하면서 라인트래킹까지 통합
 -> 동시에 작동이 잘 안됨 테스트 중.
-![alt text](IMG_3231-1.jpg)
-![alt text](image.png)
+![주행 테스트](IMG_3231-1.jpg)
+![라인트레이싱 화면](image.png)
 -> 출발지에서 명령 기다리는 문제
 -> 초점을 계속 다시 잡는..?
 
