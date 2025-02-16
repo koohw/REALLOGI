@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+# 회전코드
 from PCA9685 import PCA9685
 import time
 Dir = [
