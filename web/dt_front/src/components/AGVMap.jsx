@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  Circle,
-} from "lucide-react";
+import { Circle, Maximize2, Minimize2 } from "lucide-react";
 import { agvService } from "../api/agvService";
-import AGVControlPanel from "./AGVControlPanel";
 import TileMap from "./TileMap";
-
-const AGVMap = ({ onStateChange }) => {
-  // Add onStateChange prop here
+import AGVControlPanel from "./AGVControlPanel";
+import AnalyticsView from "./AnalyticsView";
+import { useDispatch } from "react-redux";
+import { updateAGVData, updateOrderTotal } from "../features/agvSlice";
+const AGVMap = ({ onStateChange, showControls }) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapContainerRef = useRef(null);
   const [agvData, setAgvData] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
   const [lastUpdate, setLastUpdate] = useState("");
   const agvPositions = useRef(new Map());
   const cellSize = 25;
@@ -22,6 +20,7 @@ const AGVMap = ({ onStateChange }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedAgvs, setSelectedAgvs] = useState([]);
+  const dispatch = useDispatch();
 
   const mapData = [
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
@@ -38,20 +37,41 @@ const AGVMap = ({ onStateChange }) => {
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
   ];
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mapContainerRef.current.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
   useEffect(() => {
-    const interpolatePosition = (startX, startY, endX, endY, progress) => {
-      return {
-        x: startX + (endX - startX) * progress,
-        y: startY + (endY - startY) * progress,
-      };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
     };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const interpolatePosition = (startX, startY, endX, endY, progress) => ({
+      x: startX + (endX - startX) * progress,
+      y: startY + (endY - startY) * progress,
+    });
 
     const updateAGVPosition = (agvId, startX, startY, endX, endY, duration) => {
       const startTime = performance.now();
+
       const animate = (currentTime) => {
+        if (!isSubscribed) return;
+
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
         const { x, y } = interpolatePosition(
           startX,
           startY,
@@ -59,6 +79,7 @@ const AGVMap = ({ onStateChange }) => {
           endY,
           progress
         );
+
         const agvElement = document.getElementById(`agv-${agvId}`);
         if (agvElement) {
           agvElement.style.transform = `translate(${x * cellSize}px, ${
@@ -75,46 +96,83 @@ const AGVMap = ({ onStateChange }) => {
     };
 
     const eventSource = agvService.getAgvStream();
+
     eventSource.onmessage = (event) => {
+      if (!isSubscribed) return;
+
       const data = JSON.parse(event.data);
+
       if (data.success && data.agvs) {
+        // Update AGV positions and animations
         data.agvs.forEach((newAgv) => {
           const currentPos = agvPositions.current.get(newAgv.agv_id);
           if (currentPos) {
-            if (
-              currentPos.x !== newAgv.location_y ||
-              currentPos.y !== newAgv.location_x
-            ) {
+            const newX = newAgv.location_y;
+            const newY = newAgv.location_x;
+
+            if (currentPos.x !== newX || currentPos.y !== newY) {
               updateAGVPosition(
                 newAgv.agv_id,
                 currentPos.x,
                 currentPos.y,
-                newAgv.location_y,
-                newAgv.location_x,
+                newX,
+                newY,
                 1000
               );
             }
           }
+
           agvPositions.current.set(newAgv.agv_id, {
             x: newAgv.location_y,
             y: newAgv.location_x,
           });
         });
 
+        // Update local state
         setAgvData(data.agvs);
-        // Call onStateChange prop with updated AGV data
+        setLastUpdate(data.agvs[0]?.realtime || "");
+
+        // Update Redux store
+        const timestamp = new Date(data.overall_efficiency_history[0][0]);
+        const timeLabel = `${String(timestamp.getHours()).padStart(
+          2,
+          "0"
+        )}:${String(timestamp.getMinutes()).padStart(2, "0")}:${String(
+          timestamp.getSeconds()
+        ).padStart(2, "0")}`;
+
+        dispatch(
+          updateAGVData({
+            time: timeLabel,
+            efficiency: data.overall_efficiency,
+          })
+        );
+
+        const orderTotal = Object.values(data.order_success).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        dispatch(updateOrderTotal(orderTotal));
+
+        // Call onStateChange if provided
         if (onStateChange) {
           onStateChange(data.agvs);
         }
-        setLastUpdate(data.agvs[0]?.realtime || "");
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:", error);
+      if (isSubscribed) {
+        eventSource.close();
       }
     };
 
     return () => {
+      isSubscribed = false;
       eventSource.close();
     };
-  }, [onStateChange]); // Add onStateChange to dependency array
-
+  }, [dispatch, onStateChange]);
   // Rest of your component code...
   const handleAgvClick = (agv, e) => {
     e.stopPropagation();
@@ -164,18 +222,7 @@ const AGVMap = ({ onStateChange }) => {
   };
 
   const getDirectionArrow = (direction) => {
-    switch (direction?.toLowerCase()) {
-      case "u":
-        return <ArrowUp className="text-white" size={10} />;
-      case "d":
-        return <ArrowDown className="text-white" size={10} />;
-      case "l":
-        return <ArrowLeft className="text-white" size={10} />;
-      case "r":
-        return <ArrowRight className="text-white" size={10} />;
-      default:
-        return <Circle className="text-white" size={8} />;
-    }
+    return <Circle className="text-white" size={8} />;
   };
 
   const getAGVColor = (state) => {
@@ -202,9 +249,26 @@ const AGVMap = ({ onStateChange }) => {
   };
 
   return (
-    <div className="flex gap-4 h-full w-full">
-      <div className="flex-1 flex flex-col">
+    <div
+      className={`flex gap-4 ${
+        isFullscreen ? "h-screen w-screen p-4 bg-[#11263f]" : "h-full w-full"
+      }`}
+    >
+      <div className="flex-1 flex flex-col relative">
+        <button
+          onClick={toggleFullscreen}
+          className="absolute top-4 right-4 z-10 p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white transition-colors"
+          title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-5 h-5" />
+          ) : (
+            <Maximize2 className="w-5 h-5" />
+          )}
+        </button>
+
         <div
+          ref={mapContainerRef}
           className="relative overflow-hidden border border-gray-700 rounded-lg shadow-lg flex-1"
           onClick={handleMapClick}
         >
@@ -223,6 +287,7 @@ const AGVMap = ({ onStateChange }) => {
           >
             <TileMap mapData={mapData} cellSize={cellSize} />
 
+            {/* AGV markers */}
             {agvData.map((agv) => {
               const initialPos = agvPositions.current.get(agv.agv_id) || {
                 x: agv.location_y,
@@ -274,12 +339,18 @@ const AGVMap = ({ onStateChange }) => {
         </div>
       </div>
 
-      <div className="w-96 flex-shrink-0">
-        <AGVControlPanel
-          selectedAgvs={selectedAgvs}
-          onActionComplete={() => setSelectedAgvs([])}
-        />
-      </div>
+      {!isFullscreen && (
+        <div className="w-96 flex-shrink-0">
+          {showControls ? (
+            <AGVControlPanel
+              selectedAgvs={selectedAgvs}
+              onActionComplete={() => setSelectedAgvs([])}
+            />
+          ) : (
+            <AnalyticsView agvData={analyticsData} />
+          )}
+        </div>
+      )}
     </div>
   );
 };

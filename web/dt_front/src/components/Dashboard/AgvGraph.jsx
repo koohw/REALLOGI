@@ -93,8 +93,8 @@ const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
               tick={{ fill: "#fff" }}
             />
             <YAxis
-              domain={[5, 15]}
-              ticks={[5, 10, 15]}
+              domain={[0, 15]}
+              ticks={[0, 5, 10, 15]}
               tick={{ fill: "#fff" }}
               label={{
                 value: "효율성",

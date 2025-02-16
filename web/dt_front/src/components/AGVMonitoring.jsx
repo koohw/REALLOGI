@@ -7,26 +7,6 @@ import React, {
 } from "react";
 import { io } from "socket.io-client";
 
-const Modal = ({ isOpen, onClose, children, title }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-[#11263f] rounded-lg p-6 max-w-lg w-full mx-4 relative border border-gray-700">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-200"
-        >
-          ✕
-        </button>
-        <h2 className="text-xl font-bold mb-4 text-gray-200">{title}</h2>
-        {children}
-      </div>
-    </div>
-  );
-};
-
-// 서버의 맵 데이터와 동일하게 설정
 const DEFAULT_MAP = [
   [2, 2, 2, 2, 2, 2, 2],
   [0, 0, 0, 0, 0, 0, 0],
@@ -40,6 +20,8 @@ const DEFAULT_MAP = [
 ];
 
 const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
+  const mapContainerRef = useRef(null);
+  const [scale, setScale] = useState(1);
   const [agvData, setAgvData] = useState({ agv_count: 0, agvs: [] });
   const [speed, setSpeed] = useState(1);
   const [isRunning, setIsRunning] = useState(false);
@@ -47,22 +29,37 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   const [connectionStatus, setConnectionStatus] = useState("연결 중...");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const socketRef = useRef(null);
-  const mapContainerRef = useRef(null);
   const previousPositionsRef = useRef(new Map());
 
-  const CELL_SIZE = 40;
-  const MAP_WIDTH = mapData.length * CELL_SIZE;
-  const MAP_HEIGHT = mapData[0].length * CELL_SIZE;
+  const BASE_CELL_SIZE = 40;
+  const MAP_WIDTH = mapData[0].length * BASE_CELL_SIZE;
+  const MAP_HEIGHT = mapData.length * BASE_CELL_SIZE;
+
+  // 컨테이너 크기에 따른 scale 계산
+  useEffect(() => {
+    const updateScale = () => {
+      if (mapContainerRef.current) {
+        const containerWidth = mapContainerRef.current.clientWidth;
+        const containerHeight = mapContainerRef.current.clientHeight;
+        const scaleX = containerWidth / MAP_WIDTH;
+        const scaleY = containerHeight / MAP_HEIGHT;
+        const newScale = Math.min(scaleX, scaleY, 1);
+        setScale(newScale);
+      }
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, [MAP_WIDTH, MAP_HEIGHT]);
 
   const getAGVColor = (agvId, currentX, currentY) => {
     const prevPosition = previousPositionsRef.current.get(agvId);
     if (!prevPosition) {
       previousPositionsRef.current.set(agvId, { x: currentX, y: currentY });
-      return "bg-green-500"; // 초기 상태는 이동 중으로 간주
+      return "bg-green-500";
     }
-
     const isMoving = prevPosition.x !== currentX || prevPosition.y !== currentY;
     previousPositionsRef.current.set(agvId, { x: currentX, y: currentY });
     return isMoving ? "bg-green-500" : "bg-orange-500";
@@ -77,31 +74,20 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
 
     switch (cellType) {
       case 0:
-        return {
-          ...baseStyle,
-          backgroundColor: "#11263f",
-        };
+        return { ...baseStyle, backgroundColor: "#11263f" };
       case 1:
-        return {
-          ...baseStyle,
-          backgroundImage: "url(/images/box.jpg)",
-        };
+        return { ...baseStyle, backgroundImage: "url(/images/box.jpg)" };
       case 2:
-        return {
-          backgroundColor: "#0D1B2A",
-        };
+        return { backgroundColor: "#0D1B2A" };
       default:
-        return {
-          backgroundColor: "#11263f",
-        };
+        return { backgroundColor: "#11263f" };
     }
   };
 
-  // Socket connection and event handlers remain the same
+  // Socket 연결 및 이벤트 처리
   useEffect(() => {
     const initializeSocket = () => {
       const serverAddress = new URL(serverUrl);
-
       const socket = io(serverAddress.origin, {
         path: "/socket.io",
         transports: ["websocket"],
@@ -116,7 +102,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
       });
 
       socket.on("message", handleSocketMessage);
-      socket.on("simulation_final", handleSimulationFinal); // Add this line
+      socket.on("simulation_final", handleSimulationFinal);
       socket.on("disconnect", handleDisconnect);
       socket.on("error", handleError);
 
@@ -131,21 +117,20 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     };
   }, [serverUrl]);
 
-  // Event handlers remain the same
   const handleSimulationFinal = useCallback((result) => {
     setIsAnalyzing(false);
     setAnalysisResult(result);
-    setShowAnalysisModal(true);
   }, []);
 
-  const requestAnalysis = useCallback(() => {
+  const requestDeepAnalysis = useCallback(() => {
     if (socketRef.current?.connected) {
       setIsAnalyzing(true);
       setAnalysisResult(null);
-      socketRef.current.emit("message", {
-        command: "analyze",
+      socketRef.current.emit("simulate_final", {
         agv_count: agvCount,
-        speed,
+        duration: 3000,
+        initial_speed: speed,
+        output: "final",
       });
     }
   }, [agvCount, speed]);
@@ -182,7 +167,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     (event) => {
       const newCount = parseInt(event.target.value);
       setAgvCount(newCount);
-
       if (socketRef.current?.connected) {
         const message = {
           agv_count: newCount,
@@ -199,7 +183,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     (event) => {
       const newSpeed = Number(event.target.value);
       setSpeed(newSpeed);
-
       if (socketRef.current?.connected) {
         const message = {
           speed: newSpeed,
@@ -215,7 +198,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
   const toggleSimulation = useCallback(() => {
     const newIsRunning = !isRunning;
     setIsRunning(newIsRunning);
-
     if (socketRef.current?.connected) {
       const message = {
         command: newIsRunning ? "start" : "stop",
@@ -228,11 +210,9 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
 
   const renderAGVs = useMemo(() => {
     if (!agvData.agvs?.length) return null;
-
     return agvData.agvs.map((agv) => {
-      const x = agv.location_y * CELL_SIZE;
-      const y = agv.location_x * CELL_SIZE;
-
+      const x = agv.location_y * BASE_CELL_SIZE;
+      const y = agv.location_x * BASE_CELL_SIZE;
       return (
         <div
           key={agv.agv_id}
@@ -240,15 +220,13 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
           style={{
             left: `${x}px`,
             top: `${y}px`,
-            width: `${CELL_SIZE}px`,
-            height: `${CELL_SIZE}px`,
+            width: `${BASE_CELL_SIZE}px`,
+            height: `${BASE_CELL_SIZE}px`,
           }}
         >
           <div
             className="relative"
-            style={{
-              transform: `rotate(${agv.direction || 0}deg)`,
-            }}
+            style={{ transform: `rotate(${agv.direction || 0}deg)` }}
           >
             <div
               className={`w-8 h-8 rounded-full ${getAGVColor(
@@ -266,13 +244,12 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         </div>
       );
     });
-  }, [agvData, CELL_SIZE]);
+  }, [agvData, BASE_CELL_SIZE]);
 
   return (
     <div className="p-3 border border-gray-700 rounded-lg bg-[#11263f] shadow-lg">
-      {/* Controls Row */}
+      {/* 컨트롤 영역 */}
       <div className="flex items-center gap-3 mb-3">
-        {/* Connection Status */}
         <span
           className={`px-2 py-0.5 rounded-full text-xs ${
             connectionStatus === "연결됨"
@@ -284,8 +261,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         >
           {connectionStatus}
         </span>
-
-        {/* AGV Count */}
         <div className="flex items-center text-sm text-gray-200">
           <span className="mr-1">AGV:</span>
           <input
@@ -297,8 +272,6 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
             className="w-16 px-1.5 py-0.5 border border-gray-700 rounded text-sm bg-[#0D1B2A] text-gray-200"
           />
         </div>
-
-        {/* Speed Selection */}
         <div className="flex items-center text-sm text-gray-200">
           <span className="mr-1">Speed:</span>
           <select
@@ -314,16 +287,12 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
             <option value={16}>16x</option>
           </select>
         </div>
-
-        {/* Current AGVs info */}
         <div className="text-xs text-gray-400">
           Current AGVs: {agvData.agv_count || 0}
         </div>
-
-        {/* Action Buttons */}
         <div className="flex items-center gap-2 ml-auto">
           <button
-            onClick={requestAnalysis}
+            onClick={requestDeepAnalysis}
             className="px-2 py-1 rounded text-sm bg-blue-900 text-gray-200 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 border border-gray-700"
             disabled={connectionStatus !== "연결됨" || isAnalyzing}
           >
@@ -352,7 +321,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                 분석중
               </>
             ) : (
-              "즉시 분석"
+              "심층 분석"
             )}
           </button>
           <button
@@ -367,20 +336,20 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
         </div>
       </div>
 
-      {/* Map Container */}
+      {/* 지도 영역 */}
       <div
-        className="relative h-96 overflow-auto border border-gray-700 rounded-lg bg-[#0D1B2A]"
         ref={mapContainerRef}
+        className="relative h-96 border border-gray-700 rounded-lg bg-[#0D1B2A] overflow-hidden"
       >
         <div
           className="relative"
           style={{
-            width: `${MAP_HEIGHT}px`,
-            height: `${MAP_WIDTH}px`,
-            background: "#f8f9fa",
+            width: `${MAP_WIDTH}px`,
+            height: `${MAP_HEIGHT}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
           }}
         >
-          {/* Map Background */}
           {mapData.map((row, y) =>
             row.map((cell, x) => (
               <div
@@ -388,62 +357,91 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                 style={{
                   ...getCellStyle(cell),
                   position: "absolute",
-                  left: x * CELL_SIZE,
-                  top: y * CELL_SIZE,
-                  width: CELL_SIZE,
-                  height: CELL_SIZE,
+                  left: x * BASE_CELL_SIZE,
+                  top: y * BASE_CELL_SIZE,
+                  width: BASE_CELL_SIZE,
+                  height: BASE_CELL_SIZE,
                 }}
-              />
+                className="flex items-center justify-center"
+              >
+                {cell === 0 && (
+                  <div className="w-1 h-1 bg-gray-500 opacity-70 rounded-full" />
+                )}
+              </div>
             ))
           )}
-
-          {/* AGVs Layer */}
           {renderAGVs}
         </div>
-      </div>
 
-      {/* Analysis Result Modal */}
-      <Modal
-        isOpen={showAnalysisModal}
-        onClose={() => setShowAnalysisModal(false)}
-        title="시뮬레이션 결과"
-      >
+        {/* 결과 오버레이 영역 (지도 위에 표시) */}
         {analysisResult && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-semibold mb-2 text-gray-200">
-                AGV 운영 통계
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
-                  <div className="text-sm text-gray-400">시간당 처리량</div>
-                  <div className="text-lg font-semibold text-gray-200">
+          <div className="absolute inset-0 z-20 bg-[#11263f] bg-opacity-95 flex flex-col justify-center items-center">
+            {/* 닫기 버튼 */}
+            <button
+              className="absolute top-2 right-2 text-gray-200 hover:text-gray-400 text-2xl"
+              onClick={() => setAnalysisResult(null)}
+            >
+              ✕
+            </button>
+            <div className="w-full h-full p-4">
+              <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">처리량</span>
+                  <span className="font-semibold text-gray-200 text-base">
                     {analysisResult.throughput_per_hour.toFixed(1)}건/시간
-                  </div>
+                  </span>
                 </div>
-                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
-                  <div className="text-sm text-gray-400">AGV당 배송량</div>
-                  <div className="text-lg font-semibold text-gray-200">
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">배송량</span>
+                  <span className="font-semibold text-gray-200 text-base">
                     {analysisResult.delivered_per_agv.toFixed(1)}건
-                  </div>
+                  </span>
                 </div>
-                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
-                  <div className="text-sm text-gray-400">평균 사이클 타임</div>
-                  <div className="text-lg font-semibold text-gray-200">
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">사이클</span>
+                  <span className="font-semibold text-gray-200 text-base">
                     {analysisResult.avg_cycle.toFixed(1)}초
-                  </div>
+                  </span>
                 </div>
-                <div className="bg-[#0D1B2A] p-3 rounded border border-gray-700">
-                  <div className="text-sm text-gray-400">AGV 수</div>
-                  <div className="text-lg font-semibold text-gray-200">
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">AGV 수</span>
+                  <span className="font-semibold text-gray-200 text-base">
                     {analysisResult.agv_count}대
-                  </div>
+                  </span>
+                </div>
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">처리 표준편차</span>
+                  <span className="font-semibold text-gray-200 text-base">
+                    {analysisResult.std_throughput_per_hour.toFixed(1)}건/시간
+                  </span>
+                </div>
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">배송 표준편차</span>
+                  <span className="font-semibold text-gray-200 text-base">
+                    {analysisResult.std_delivered_per_agv.toFixed(1)}건
+                  </span>
+                </div>
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">반복 횟수</span>
+                  <span className="font-semibold text-gray-200 text-base">
+                    {analysisResult.repeat_runs}회
+                  </span>
+                </div>
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">가동률</span>
+                  <span className="font-semibold text-gray-200 text-base">
+                    {analysisResult.avg_utilization.toFixed(2)}
+                  </span>
+                </div>
+                {/* 9번째 칸은 추가 정보를 넣거나 비워둘 수 있습니다 */}
+                <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
+                  <span className="text-gray-400 text-xs">전체 결과</span>
                 </div>
               </div>
             </div>
           </div>
         )}
-      </Modal>
+      </div>
     </div>
   );
 };
