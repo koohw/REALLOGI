@@ -235,7 +235,7 @@ def line_following_with_qr():
     prev_correction = 0
 
     # 가속도계 관련 초기화 (첫번째 코드 그대로)
-    bus = smbus.SMBus(1)
+    bus = smbus.SMBus(7)
     mpu = MPU6050(bus)
     kalman_x = KalmanFilter(Q=0.001, R=0.1)
     kalman_y = KalmanFilter(Q=0.001, R=0.1)
