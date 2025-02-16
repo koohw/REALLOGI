@@ -19,19 +19,16 @@ pipeline {
             }
         }
 
-        stage('Redeploy Stack') {
+        stage('Deploy Containers') {
             steps {
-                configFileProvider([configFile(fileId: 'docker-compose-config', targetLocation: 'docker-compose.yml')]) {
-                    script {
-                        sh 'docker stack rm dt-stack'
-                        sh 'docker network disconnect -f dt-stack_dt-stack-network $(docker ps -q) || true'
-                        sh 'docker network prune -f'
-                        sh 'sleep 15'
-                        sh 'docker stack deploy -c docker-compose.yml dt-stack --with-registry-auth'
-                    }
+                script {
+                    // 기존 컨테이너 중지 및 제거
+                    sh 'docker-compose down'
+                    
+                    // 새로운 컨테이너 시작
+                    sh 'docker-compose up -d'
                 }
             }
         }
-
     }
 }
