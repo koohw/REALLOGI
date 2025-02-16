@@ -1,13 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  Circle,
-  Maximize2,
-  Minimize2,
-} from "lucide-react";
+import { Circle, Maximize2, Minimize2 } from "lucide-react";
 import { agvService } from "../api/agvService";
 import TileMap from "./TileMap";
 import AGVControlPanel from "./AGVControlPanel";
@@ -230,18 +222,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
   };
 
   const getDirectionArrow = (direction) => {
-    switch (direction?.toLowerCase()) {
-      case "u":
-        return <ArrowUp className="text-white" size={10} />;
-      case "d":
-        return <ArrowDown className="text-white" size={10} />;
-      case "l":
-        return <ArrowLeft className="text-white" size={10} />;
-      case "r":
-        return <ArrowRight className="text-white" size={10} />;
-      default:
-        return <Circle className="text-white" size={8} />;
-    }
+    return <Circle className="text-white" size={8} />;
   };
 
   const getAGVColor = (state) => {
