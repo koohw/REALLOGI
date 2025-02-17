@@ -14,7 +14,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import logging
+import os
 logger = logging.getLogger(__name__)
+
 
 global_speed_factor = 1.0
 SIM_RUNNING = False
@@ -169,11 +171,15 @@ def find_nearest_shelf(pos, current_agv_id=None):
 def create_app(port):
     app = Flask(__name__)
     CORS(app)
-    socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"],
-                          path='socket.io', async_mode='eventlet',
-                          logger=True, engineio_logger=True,
-                          ping_timeout=5000, ping_interval=2500)
-    bfs_path = a_star_path
+    socketio = SocketIO(app, 
+    cors_allowed_origins=[os.environ.get('FRONTEND_URL')],
+    path='socket.io',
+    async_mode='eventlet',
+    logger=True,
+    engineio_logger=True,
+    ping_timeout=5000,
+    ping_interval=2500
+    )
 
     class AGV:
         def __init__(self, agv_id, start_pos):
