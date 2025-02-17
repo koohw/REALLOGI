@@ -1,17 +1,17 @@
 // services/agvService.js
 
 // 추후 aws에 배포할 때 API_BASE_URL을 변경해야 함
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = process.env.REACT_APP_API_URL;
 
 export const agvService = {
   // AGV 상태 스트림 받기
   getAgvStream: () => {
-    return new EventSource(`${API_BASE_URL}/agv-stream`);
+    return new EventSource(`${API_BASE_URL}/montior/agv-stream`);
   },
 
   // AGV 정지 명령
   stopAgv: async (agvIds) => {
-    return await fetch(`${API_BASE_URL}/agv/stop`, {
+    return await fetch(`${API_BASE_URL}/monitor/agv/stop`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -22,7 +22,7 @@ export const agvService = {
 
   // AGV 복귀 명령
   returnAgv: async (agvIds) => {
-    return await fetch(`${API_BASE_URL}/agv/return`, {
+    return await fetch(`${API_BASE_URL}/monitor/agv/return`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,7 +33,7 @@ export const agvService = {
 
   // AGV 재가동 명령
   restartAgv: async (agvIds) => {
-    return await fetch(`${API_BASE_URL}/agv/restart`, {
+    return await fetch(`${API_BASE_URL}/monitor/agv/restart`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
