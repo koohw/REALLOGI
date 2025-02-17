@@ -45,7 +45,7 @@ function MonitorPage() {
               }`}
               onClick={() => setShowControls(true)}
             >
-              제어 패널
+              분석
             </button>
             <button
               className={`px-4 py-2 rounded-lg transition-colors ${
@@ -55,7 +55,7 @@ function MonitorPage() {
               }`}
               onClick={() => setShowControls(false)}
             >
-              분석
+              제어
             </button>
           </div>
         </div>

@@ -342,12 +342,12 @@ const AGVMap = ({ onStateChange, showControls }) => {
       {!isFullscreen && (
         <div className="w-96 flex-shrink-0">
           {showControls ? (
+            <AnalyticsView agvData={analyticsData} />
+          ) : (
             <AGVControlPanel
               selectedAgvs={selectedAgvs}
               onActionComplete={() => setSelectedAgvs([])}
             />
-          ) : (
-            <AnalyticsView agvData={analyticsData} />
           )}
         </div>
       )}
