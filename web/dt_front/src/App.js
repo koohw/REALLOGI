@@ -85,7 +85,7 @@ function MainApp() {
             </ProtectedRoute>
           }
         />
-        <Route path="/monitor" element={<MonitorPage />} />
+        <Route path="/mainmonitor" element={<MonitorPage />} />
       </Routes>
     </BrowserRouter>
   );
