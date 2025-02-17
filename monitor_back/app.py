@@ -15,7 +15,9 @@ CORS(app, resources={
     r"/moni/*": {
         "origins": "*",
         "allow_headers": ["Content-Type"],
-        "methods": ["GET", "POST", "OPTIONS"]
+        "methods": ["GET", "POST", "OPTIONS"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": True
     }
 })
 
@@ -186,6 +188,8 @@ def sse():
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             time.sleep(1)
     response = Response(event_stream(), mimetype="text/event-stream")
+    response.headers['X-Accel-Buffering'] = 'no'  # Nginx 프록시를 위한 설정
+    response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['Connection']   = 'keep-alive'
     return response
