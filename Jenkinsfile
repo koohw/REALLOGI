@@ -11,6 +11,14 @@ pipeline {
             }
         }
 
+        stage('Build Backend (Flask)') {
+            steps {
+                dir('monitor_back') {
+                    sh 'docker build -t flask-app:latest .'
+                }
+            }
+        }
+
         stage('Build Frontend (React)') {
             steps {
                 dir('web/dt_front') {
@@ -22,10 +30,7 @@ pipeline {
         stage('Deploy Containers') {
             steps {
                 script {
-                    // 기존 컨테이너 중지 및 제거
                     sh 'docker-compose down'
-                    
-                    // 새로운 컨테이너 시작
                     sh 'docker-compose up -d'
                 }
             }
