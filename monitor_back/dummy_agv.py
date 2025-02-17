@@ -14,7 +14,7 @@ current_position = [8, 0]
 # 마지막 명령이 끝난 시간을 저장 (idle time 측정용)
 last_command_end_time = None
 
-def process_path_command(full_path, client):
+def process_path_command(path, client):
     global current_position, last_command_end_time
     command_start_time = time.time()
     # 이전 명령 종료 이후 idle time 계산(명령이 들어오기 전 대기 시간)
@@ -24,9 +24,9 @@ def process_path_command(full_path, client):
     else:
         print("[가상 하드웨어] 첫 명령 수신")
     
-    print(f"[가상 하드웨어] 전체 경로 명령 수신: {full_path}")
+    print(f"[가상 하드웨어] 전체 경로 명령 수신: {path}")
     # 전체 경로를 순차적으로 따라 이동 (각 좌표마다 1초 지연)
-    for pos in full_path:
+    for pos in path:
         time.sleep(1)  # 이동 소요 시간 시뮬레이션
         current_position = pos
         # 이동 완료 후 ACK 메시지 전송
@@ -51,9 +51,10 @@ def on_message(client, userdata, msg):
         payload = json.loads(msg.payload.decode())
         command = payload.get("command")
         if command == "PATH":
-            full_path = payload.get("data", {}).get("full_path", [])
-            if full_path:
-                process_path_command(full_path, client)
+            # 수정: "full_path" 대신 "path" 키로 경로를 가져옵니다.
+            path = payload.get("data", {}).get("path", [])
+            if path:
+                process_path_command(path, client)
         elif command == "STOP":
             print("[가상 하드웨어] STOP 명령 수신, 이동 정지")
             ack_payload = {
@@ -63,6 +64,15 @@ def on_message(client, userdata, msg):
             }
             client.publish(TOPIC_STATUS_FROM_DEVICE, json.dumps(ack_payload))
             # STOP 명령 처리 후 현재 시각 저장
+            last_command_end_time = time.time()
+        elif command == "RESUME":
+            print("[가상 하드웨어] RESUME 명령 수신, 이동 재개")
+            ack_payload = {
+                "ack": True,
+                "location": current_position,
+                "state": "running"
+            }
+            client.publish(TOPIC_STATUS_FROM_DEVICE, json.dumps(ack_payload))
             last_command_end_time = time.time()
         else:
             print(f"[가상 하드웨어] 미확인 명령 수신: {command}")
