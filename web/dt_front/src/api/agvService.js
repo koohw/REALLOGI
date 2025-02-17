@@ -22,23 +22,23 @@ const streamClient = axios.create({
 export const agvService = {
   // AGV 상태 스트림 받기
   getAgvStream: () => {
-    return streamClient.get('/montior/agv-stream', {
+    return streamClient.get('/moni/agv-stream', {
       responseType: 'stream'
     });
   },
 
   // AGV 정지 명령
   stopAgv: async (agvIds) => {
-    return await apiClient.post('/monitor/agv/stop', { agvIds });
+    return await apiClient.post('/moni/agv/stop', { agvIds });
   },
 
   // AGV 복귀 명령
   returnAgv: async (agvIds) => {
-    return await apiClient.post('/monitor/agv/return', { agvIds });
+    return await apiClient.post('/moni/agv/return', { agvIds });
   },
 
   // AGV 재가동 명령
   restartAgv: async (agvIds) => {
-    return await apiClient.post('/monitor/agv/restart', { agvIds });
+    return await apiClient.post('/moni/agv/restart', { agvIds });
   },
 };

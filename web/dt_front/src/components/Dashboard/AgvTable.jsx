@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { agvService } from "../../api/agvService";
 
 export default function AgvTable() {
   const [agvs, setAgvs] = useState([]);
 
   useEffect(() => {
-    const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
+    const eventSource = agvService.getAgvStream();
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
