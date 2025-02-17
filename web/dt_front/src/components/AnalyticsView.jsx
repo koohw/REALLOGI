@@ -80,8 +80,8 @@ const AnalyticsView = () => {
                 interval={0}
               />
               <YAxis
-                domain={[0, 15]}
-                ticks={[0, 5, 10, 15]}
+                domain={[0, 30]}
+                ticks={[0, 10, 20, 30]}
                 tick={{ fill: "#9CA3AF" }}
               />
               <Tooltip
@@ -91,7 +91,7 @@ const AnalyticsView = () => {
                   borderRadius: "4px",
                   color: "#fff",
                 }}
-                formatter={(value) => [`${value.toFixed(2)}%`, "효율성"]}
+                formatter={(value) => [`${value.toFixed(2)}sec`, "효율성"]}
               />
               <Legend />
               <Line
