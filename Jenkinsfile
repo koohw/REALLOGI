@@ -29,9 +29,9 @@ pipeline {
 
         stage('Deploy Containers') {
             steps {
-                script {
-                    sh 'docker-compose down'
-                    sh 'docker-compose up -d'
+                configFileProvider([configFile(fileId: 'docker-composer-add', variable: 'DOCKER_COMPOSE_FILE')]) {
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE down'
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE up -d'
                 }
             }
         }
