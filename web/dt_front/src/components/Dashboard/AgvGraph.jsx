@@ -16,13 +16,16 @@ import {
   updateOrderTotal,
 } from "../../features/agvSlice";
 
+import { agvService } from "../../api/agvService";
+
 const RealTimeAGVGraph = ({ onDataUpdate, onOrderUpdate }) => {
   const dispatch = useDispatch();
   const agvData = useSelector((state) => state.agv.agvData);
   const lastEfficiency = useSelector((state) => state.agv.lastEfficiency);
 
+  
   useEffect(() => {
-    const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
+    const eventSource = agvService.getAgvStream();
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
