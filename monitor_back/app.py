@@ -11,7 +11,13 @@ from simulation import shared_data, data_lock, simulation_main, mqtt_client, TOP
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/moni/*": {
+        "origins": "*",
+        "allow_headers": ["Content-Type"],
+        "methods": ["GET", "POST", "OPTIONS"]
+    }
+})
 
 def convert_agv_id(agv_str):
     """
@@ -179,8 +185,12 @@ def sse():
                 }
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             time.sleep(1)
-    return Response(event_stream(), content_type="text/event-stream")
+            response = Response(event_stream(), mimetype="text/event-stream")
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Connection'] = 'keep-alive'
+    return response
 
+#event_stream(), content_type="text/event-stream")# 
 def start_background_threads():
     sim_thread = threading.Thread(target=simulation_main, daemon=True)
     sim_thread.start()

@@ -21,10 +21,14 @@ const streamClient = axios.create({
 
 export const agvService = {
   // AGV 상태 스트림 받기
+  // getAgvStream: () => {
+  //   console.log('getAgvStream');
+  //   return streamClient.get('/moni/agv-stream', {
+  //     responseType: 'stream'
+  //   });
+  // },
   getAgvStream: () => {
-    return streamClient.get('/moni/agv-stream', {
-      responseType: 'stream'
-    });
+    return new EventSource(`${API_BASE_URL}/moni/agv-stream`);
   },
 
   // AGV 정지 명령

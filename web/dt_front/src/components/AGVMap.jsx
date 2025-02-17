@@ -103,7 +103,6 @@ const AGVMap = ({ onStateChange, showControls }) => {
 
     eventSource.onmessage = (event) => {
       if (!isSubscribed) return;
-
       const data = JSON.parse(event.data);
 
       if (data.success && data.agvs) {
@@ -166,12 +165,12 @@ const AGVMap = ({ onStateChange, showControls }) => {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error("SSE Error:", error);
-      if (isSubscribed) {
-        eventSource.close();
-      }
-    };
+    // eventSource.onerror = (error) => {
+    //   console.error("SSE Error:", error);
+    //   if (isSubscribed) {
+    //     eventSource.close();
+    //   }
+    // };
 
     return () => {
       isSubscribed = false;
