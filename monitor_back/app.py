@@ -4,6 +4,8 @@ import json
 import time
 import threading
 from datetime import datetime
+from dotenv import load_dotenv
+import os 
 
 from simulation import shared_data, data_lock, simulation_main, mqtt_client, TOPIC_COMMAND_TO_DEVICE
 
@@ -185,7 +187,7 @@ def start_background_threads():
 
 if __name__ == '__main__':
     start_background_threads()
-    app.run(debug=False, use_reloader=False, host='0.0.0.0',port=2025)
+    app.run(debug=False, use_reloader=False, host=os.getenv('FRONTEND_URL'),port=2025)
 
 
 
