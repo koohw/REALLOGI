@@ -278,6 +278,10 @@ def check_deadlock(agv_positions, shared_data):
 ##############################################################################
 MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
 SIMULATE_MQTT = True  # AGV1은 MQTT로 전체 경로 명령 전송
+WAIT_TIMEOUT = 3   # 셀 예약 대기 타임아웃 (초)
+BACKOFF_MIN = 0.2
+BACKOFF_MAX = 0.8
+MAX_RESERVE_ATTEMPTS = 1  # 예약 시도 횟수를 1로 설정
 
 def random_start_position(agv_id):
     col = (agv_id * 2) % COLS
@@ -341,16 +345,23 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
             continue
         logging.debug("%s 전체 경로: %s", key, path)
         moved = False
-        # cell reservation 적용: 각 셀로 이동하기 전에 예약 시도
+        # 셀 예약 적용: 각 셀로 이동하기 전에 예약 시도
         for i, next_pos in enumerate(path[1:], start=1):
             with data_lock:
                 if shared_data["statuses"][key] == "STOP":
                     logging.info("%s: STOP 명령 감지됨 - 경로 취소", key)
                     return
-            # 예약 대기: 다음 셀이 예약 가능한지 확인
+            attempts = 0
+            start_wait = time.time()
             while not reserve_cell(key, next_pos):
-                yield env.timeout(0.2)
-            # 예약 성공 후 이동
+                yield env.timeout(random.uniform(BACKOFF_MIN, BACKOFF_MAX))
+                attempts += 1
+                if attempts >= MAX_RESERVE_ATTEMPTS or time.time() - start_wait > WAIT_TIMEOUT:
+                    logging.info("%s: 셀 %s 예약 시도 실패(%d회), 경로 재계산", key, next_pos, attempts)
+                    moved = False
+                    break
+            if attempts >= MAX_RESERVE_ATTEMPTS:
+                break
             yield env.timeout(MOVE_INTERVAL)
             with data_lock:
                 agv_positions[agv_id] = next_pos
@@ -360,7 +371,6 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
                     "position": next_pos
                 })
             moved = True
-            # 이전 칸의 예약 해제
             release_cell(key, prev_cell)
             prev_cell = next_pos
             try:
