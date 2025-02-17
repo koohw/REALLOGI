@@ -23,10 +23,10 @@ pipeline {
             steps {
                 script {
                     // 기존 컨테이너 중지 및 제거
-                    sh 'docker compose down'
+                    sh 'docker-compose down'
                     
                     // 새로운 컨테이너 시작
-                    sh 'docker compose up -d'
+                    sh 'docker-compose up -d'
                 }
             }
         }
