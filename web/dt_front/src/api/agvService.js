@@ -28,8 +28,12 @@ export const agvService = {
   //   });
   // },
   getAgvStream: () => {
-    return new EventSource(`${API_BASE_URL}/moni/agv-stream`);
-  },
+    // API_BASE_URL이 제대로 설정되어 있는지 확인
+    console.log('API_BASE_URL:', API_BASE_URL);
+    return new EventSource(`${API_BASE_URL}/moni/agv-stream`, {
+        withCredentials: true
+    });
+},
 
   // AGV 정지 명령
   stopAgv: async (agvIds) => {
