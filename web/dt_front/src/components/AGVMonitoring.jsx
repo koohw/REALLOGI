@@ -229,13 +229,13 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
             style={{ transform: `rotate(${agv.direction || 0}deg)` }}
           >
             <div
-              className={`w-8 h-8 rounded-full ${getAGVColor(
+              className={`w-4 h-4 rounded-full ${getAGVColor(
                 agv.agv_id,
                 agv.location_x,
                 agv.location_y
               )} flex items-center justify-center shadow-md`}
             >
-              <div className="w-2 h-2 bg-white rounded-full" />
+              <div className="w-1 h-1 bg-white rounded-full" />
             </div>
             <span className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-xs font-bold">
               {agv.agv_id}
@@ -400,19 +400,25 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">평균 사이클 타임</span>
+                    <span className="text-gray-400 text-xs">
+                      평균 사이클 타임
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.avg_cycle.toFixed(1)}초
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">평균 대기 시간</span>
+                    <span className="text-gray-400 text-xs">
+                      평균 대기 시간
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.avg_wait.toFixed(1)}초
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">평균 이동 시간</span>
+                    <span className="text-gray-400 text-xs">
+                      평균 이동 시간
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.avg_travel.toFixed(1)}초
                     </span>
@@ -446,7 +452,9 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">평균 사이클 타임</span>
+                    <span className="text-gray-400 text-xs">
+                      평균 사이클 타임
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.avg_cycle.toFixed(1)}초
                     </span>
@@ -458,25 +466,33 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">처리량 표준편차</span>
+                    <span className="text-gray-400 text-xs">
+                      처리량 표준편차
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.std_throughput_per_hour.toFixed(1)}건/시간
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">배송량 표준편차</span>
+                    <span className="text-gray-400 text-xs">
+                      배송량 표준편차
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.std_delivered_per_agv.toFixed(1)}건
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">총 반복실험 횟수</span>
+                    <span className="text-gray-400 text-xs">
+                      총 반복실험 횟수
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.repeat_runs}회
                     </span>
                   </div>
                   <div className="bg-[#0D1B2A] flex flex-col justify-center items-center p-2 border border-gray-700">
-                    <span className="text-gray-400 text-xs">평균 AGV 가동률</span>
+                    <span className="text-gray-400 text-xs">
+                      평균 AGV 가동률
+                    </span>
                     <span className="font-semibold text-gray-200 text-base">
                       {analysisResult.avg_utilization.toFixed(2)}
                     </span>
