@@ -123,9 +123,8 @@ export default function Sidebar() {
   return (
     <div className="flex flex-col w-64 h-full bg-[#0A1829] shadow-lg">
       <div className="p-6">
-        <h1 className="text-3xl font-bold mb-6 text-center text-white">
-          RealLogi
-        </h1>
+        <h1 className="text-3xl font-bold text-center text-white">RealLogi</h1>
+        <p className="text-[#a0a0a0] text-center mb-6">Remote AGV RMS System</p>
         {user && (
           <div className="flex items-center mb-6">
             <div className="w-10 h-10 rounded-full bg-gray-500 flex items-center justify-center mr-3">

@@ -304,10 +304,10 @@ const AGVMap = ({ onStateChange, showControls }) => {
                   className={`absolute flex items-center justify-center rounded-full cursor-pointer
                     ${isSelected ? "ring-2 ring-blue-500 ring-offset-2" : ""}`}
                   style={{
-                    width: cellSize * 0.8,
-                    height: cellSize * 0.8,
-                    left: cellSize * 0.1,
-                    top: cellSize * 0.1,
+                    width: cellSize * 0.3,
+                    height: cellSize * 0.3,
+                    left: cellSize * 0.4,
+                    top: cellSize * 0.4,
                     transform: `translate(${initialPos.x * cellSize}px, ${
                       initialPos.y * cellSize
                     }px)`,
