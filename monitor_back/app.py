@@ -17,7 +17,8 @@ CORS(app, resources={
         "allow_headers": ["Content-Type"],
         "methods": ["GET", "POST", "OPTIONS"],
         "expose_headers": ["Content-Type"],
-        "supports_credentials": True
+        "supports_credentials": True,
+        "max_age": 1728000
     }
 })
 
@@ -188,10 +189,13 @@ def sse():
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             time.sleep(1)
     response = Response(event_stream(), mimetype="text/event-stream")
-    response.headers['X-Accel-Buffering'] = 'no'  # Nginx 프록시를 위한 설정
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Cache-Control'] = 'no-cache'
-    response.headers['Connection']   = 'keep-alive'
+    response.headers.update({
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'text/event-stream; charset=utf-8'
+    })
     return response
 
 #event_stream(), content_type="text/event-stream")# 
