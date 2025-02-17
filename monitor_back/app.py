@@ -185,7 +185,7 @@ def start_background_threads():
 
 if __name__ == '__main__':
     start_background_threads()
-    app.run(debug=False, use_reloader=False, port=6000)
+    app.run(debug=False, use_reloader=False, host='0.0.0.0',port=6000)
 
 
 
