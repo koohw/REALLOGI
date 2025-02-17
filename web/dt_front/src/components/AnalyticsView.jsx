@@ -53,11 +53,9 @@ const AnalyticsView = () => {
     {
       name: "잔여",
       remaining: totalCapacity - orderSuccess,
-      completed: 0,
     },
     {
       name: "완료",
-      remaining: 0,
       completed: orderSuccess,
     },
   ];
