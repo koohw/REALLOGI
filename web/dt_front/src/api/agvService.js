@@ -11,13 +11,13 @@ const apiClient = axios.create({
   }
 });
 
-const streamClient = axios.create({
-  baseURL: API_BASE_URL,  // BASE_URL을 API_BASE_URL로 수정
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'text/event-stream'  // "stream"을 올바른 MIME 타입으로 수정
-  }
-});
+// const streamClient = axios.create({
+//   baseURL: API_BASE_URL,  // BASE_URL을 API_BASE_URL로 수정
+//   withCredentials: true,
+//   headers: {
+//     'Content-Type': 'text/event-stream'  // "stream"을 올바른 MIME 타입으로 수정
+//   }
+// });
 
 export const agvService = {
   // AGV 상태 스트림 받기
@@ -28,10 +28,11 @@ export const agvService = {
   //   });
   // },
   getAgvStream: () => {
-    // API_BASE_URL이 제대로 설정되어 있는지 확인
-    console.log('API_BASE_URL:', API_BASE_URL);
-    console.log('getAgvStream');
-    return new EventSource(`${API_BASE_URL}/moni/agv-stream`, {
+    // URL이 올바르게 구성되었는지 확인을 위한 로깅
+    const streamUrl = `${API_BASE_URL}/moni/agv-stream`.replace(/\/+/g, '/');
+    console.log('Stream URL:', streamUrl);
+    
+    return new EventSource(streamUrl, {
         withCredentials: true
     });
 },
