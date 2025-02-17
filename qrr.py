@@ -36,5 +36,5 @@ def generate_qr(data: dict, filename: str):
 
 if __name__ == "__main__":
     # 테스트 샘플: 정지 이벤트
-    sample_data = {"type": "stop", "location": "(6,0)"}
-    generate_qr(sample_data, "qr_stop_6_0.png")
+    sample_data = {"type": "None", "location": "(5,0)"}
+    generate_qr(sample_data, "qr_stop_5_0.png")
