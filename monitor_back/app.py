@@ -47,7 +47,7 @@ def send_stop_command_to_agv(agv_key):
     else:
         app.logger.error("[SIM] %s STOP 명령 전송 실패: %s", agv_key, payload)
 
-@app.route("/api/agv/stop", methods=["POST"])
+@app.route("/moni/agv/stop", methods=["POST"])
 def stop_agv():
     """
     AGV 정지 명령:
@@ -77,7 +77,7 @@ def stop_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "정지 명령이 전송되었습니다.", "results": results})
 
-@app.route("/api/agv/resume", methods=["POST"])
+@app.route("/moni/agv/resume", methods=["POST"])
 def resume_agv():
     """
     AGV 재시작(RESUME) 명령:
@@ -125,7 +125,7 @@ def resume_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "재시작(RESUME) 명령이 전송되었습니다.", "results": results})
 
-@app.route("/api/agv-stream")
+@app.route("/moni/agv-stream")
 def sse():
     def event_stream():
         default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
