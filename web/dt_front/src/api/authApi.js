@@ -41,6 +41,7 @@ apiClient.interceptors.response.use(
 export const authApi = {
   login: async (email, password) => {
     try {
+      console.log('url:', BASE_URL);
       return await apiClient.post('/api/users/login', { email, password });
     } catch (error) {
       throw new Error(error.message || 'Login failed');

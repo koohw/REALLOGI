@@ -5,7 +5,11 @@ import TileMap from "./TileMap";
 import AGVControlPanel from "./AGVControlPanel";
 import AnalyticsView from "./AnalyticsView";
 import { useDispatch } from "react-redux";
-import { updateAGVData, updateOrderTotal } from "../features/agvSlice";
+import {
+  updateAGVData,
+  updateOrderTotal,
+  updateOrderSuccess,
+} from "../features/agvSlice";
 const AGVMap = ({ onStateChange, showControls }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const mapContainerRef = useRef(null);
@@ -99,7 +103,6 @@ const AGVMap = ({ onStateChange, showControls }) => {
 
     eventSource.onmessage = (event) => {
       if (!isSubscribed) return;
-
       const data = JSON.parse(event.data);
 
       if (data.success && data.agvs) {
@@ -153,6 +156,7 @@ const AGVMap = ({ onStateChange, showControls }) => {
           0
         );
         dispatch(updateOrderTotal(orderTotal));
+        dispatch(updateOrderSuccess(data.order_success));
 
         // Call onStateChange if provided
         if (onStateChange) {
@@ -161,12 +165,12 @@ const AGVMap = ({ onStateChange, showControls }) => {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error("SSE Error:", error);
-      if (isSubscribed) {
-        eventSource.close();
-      }
-    };
+    // eventSource.onerror = (error) => {
+    //   console.error("SSE Error:", error);
+    //   if (isSubscribed) {
+    //     eventSource.close();
+    //   }
+    // };
 
     return () => {
       isSubscribed = false;
@@ -342,12 +346,12 @@ const AGVMap = ({ onStateChange, showControls }) => {
       {!isFullscreen && (
         <div className="w-96 flex-shrink-0">
           {showControls ? (
+            <AnalyticsView agvData={analyticsData} />
+          ) : (
             <AGVControlPanel
               selectedAgvs={selectedAgvs}
               onActionComplete={() => setSelectedAgvs([])}
             />
-          ) : (
-            <AnalyticsView agvData={analyticsData} />
           )}
         </div>
       )}

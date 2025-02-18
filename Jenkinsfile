@@ -1,5 +1,9 @@
 pipeline {
     agent any
+    environment {
+        // Jenkins Credentials에서 환경변수 가져오기
+        REACT_ENV = credentials('react-env-credentials')
+    }
     stages {
         stage('Build Backend (Spring Boot)') {
             steps {
@@ -11,24 +15,48 @@ pipeline {
             }
         }
 
+        stage('Build Backend (Flask)') {
+            steps {
+                dir('monitor_back') {
+                    sh 'docker build -t flask-app:latest .'
+                }
+            }
+        }
+
         stage('Build Frontend (React)') {
             steps {
                 dir('web/dt_front') {
-                    sh 'docker build -t react-app:latest .'
+                    // 환경변수를 임시 .env 파일로 생성
+                    sh '''
+                        echo "REACT_APP_API_URL=${REACT_ENV}" > .env
+                        docker build \
+                            --build-arg REACT_APP_API_URL=${REACT_ENV} \
+                            -t react-app:latest .
+                        rm .env
+                    '''
                 }
             }
         }
 
         stage('Deploy Containers') {
             steps {
-                script {
-                    // 기존 컨테이너 중지 및 제거
-                    sh 'docker-compose down'
-                    
-                    // 새로운 컨테이너 시작
-                    sh 'docker-compose up -d'
+                configFileProvider([configFile(fileId: 'docker-composer-add', variable: 'DOCKER_COMPOSE_FILE')]) {
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE down'
+                    sh 'docker system prune -f'  // 불필요한 리소스 정리
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE up -d'
                 }
             }
+        }
+    }
+    
+    post {
+        always {
+            // 빌드 완료 후 정리
+            cleanWs()
+        }
+        failure {
+            // 실패 시 로그 출력
+            sh 'docker-compose -f $DOCKER_COMPOSE_FILE logs'
         }
     }
 }

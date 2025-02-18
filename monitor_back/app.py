@@ -4,11 +4,22 @@ import json
 import time
 import threading
 from datetime import datetime
+from dotenv import load_dotenv
+import os 
 
 from simulation import shared_data, data_lock, simulation_main, mqtt_client, TOPIC_COMMAND_TO_DEVICE
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/moni/*": {
+        "origins": "*",
+        "allow_headers": ["Content-Type"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": True,
+        "max_age": 1728000
+    }
+})
 
 def convert_agv_id(agv_str):
     """
@@ -47,7 +58,7 @@ def send_stop_command_to_agv(agv_key):
     else:
         app.logger.error("[SIM] %s STOP 명령 전송 실패: %s", agv_key, payload)
 
-@app.route("/api/agv/stop", methods=["POST"])
+@app.route("/moni/agv/stop", methods=["POST"])
 def stop_agv():
     """
     AGV 정지 명령:
@@ -77,7 +88,7 @@ def stop_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "정지 명령이 전송되었습니다.", "results": results})
 
-@app.route("/api/agv/resume", methods=["POST"])
+@app.route("/moni/agv/resume", methods=["POST"])
 def resume_agv():
     """
     AGV 재시작(RESUME) 명령:
@@ -124,7 +135,7 @@ def resume_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "재시작(RESUME) 명령이 전송되었습니다.", "results": results})
 
-@app.route("/api/agv-stream")
+@app.route("/moni/agv-stream")
 def sse():
     def event_stream():
         default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
@@ -176,17 +187,24 @@ def sse():
                 }
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             time.sleep(1)
-    return Response(event_stream(), content_type="text/event-stream")
+    response = Response(event_stream(), mimetype="text/event-stream")
+    response.headers.update({
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'text/event-stream; charset=utf-8'
+    })
+    return response
 
+#event_stream(), content_type="text/event-stream")# 
 def start_background_threads():
     sim_thread = threading.Thread(target=simulation_main, daemon=True)
     sim_thread.start()
 
 if __name__ == '__main__':
     start_background_threads()
-    # HTTPS 관련 설정 없이 기본 HTTP로 실행
-    app.run(debug=False, use_reloader=False, host="0.0.0.0", port=5000)
-
+    app.run(debug=False, use_reloader=False, host='0.0.0.0',port=2025)
 
 
 

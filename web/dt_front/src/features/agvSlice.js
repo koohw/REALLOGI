@@ -10,7 +10,8 @@ const initialState = {
     error: 0,
   },
   orderTotal: 0,
-  agvs: [], // AGV 상세 정보를 위한 상태 추가
+  order_success: {}, // 추가: AGV별 주문 성공 데이터를 저장합니다.
+  agvs: [],
 };
 
 const agvSlice = createSlice({
@@ -30,12 +31,20 @@ const agvSlice = createSlice({
     updateOrderTotal: (state, action) => {
       state.orderTotal = action.payload;
     },
+    updateOrderSuccess: (state, action) => {
+      state.order_success = action.payload;
+    },
     updateAGVs: (state, action) => {
       state.agvs = action.payload;
     },
   },
 });
 
-export const { updateAGVData, updateStatusCounts, updateOrderTotal } =
-  agvSlice.actions;
+export const {
+  updateAGVData,
+  updateStatusCounts,
+  updateOrderTotal,
+  updateOrderSuccess,
+  updateAGVs,
+} = agvSlice.actions;
 export default agvSlice.reducer;
