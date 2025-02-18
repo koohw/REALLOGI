@@ -9,14 +9,13 @@ import paho.mqtt.client as mqtt
 import json
 
 # --------------------------------------------------
-# 로그 설정
+# 로그 설정 (파일 핸들러 제거, 콘솔에만 출력)
 DEBUG_MODE = False
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("simulation.log", encoding='utf-8')
+        logging.StreamHandler()
     ]
 )
 # --------------------------------------------------
@@ -400,7 +399,6 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
             if recalc_attempts >= max_recalc_attempts:
                 logging.error("%s: 최대 재계산 시도 횟수 초과. 이동 중단.", key)
                 return
-
 
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
