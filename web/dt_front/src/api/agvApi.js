@@ -13,6 +13,7 @@ const apiClient = axios.create({
 export const agvApi = {
   registerAgv: async (agvData) => {
     try {
+      console.log('url:', BASE_URL);
       return await apiClient.post('/api/agvs/register', agvData);
     } catch (error) {
       throw new Error(error.message || 'AGV 등록 실패');
