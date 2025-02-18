@@ -325,8 +325,11 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
     # AGV1(후반부) 및 다른 AGV: 한 칸씩 이동하면서 경로 재계산 (셀 예약 적용)
     with data_lock:
         current = agv_positions[agv_id]
-    # 초기 예약: 현재 위치는 이미 점유 중이므로 예약했다고 가정
     prev_cell = current  
+
+    max_recalc_attempts = 10  # 전체 경로 재계산 시도 횟수 제한
+    recalc_attempts = 0
+
     while True:
         with data_lock:
             if shared_data["statuses"][key] == "STOP":
@@ -342,10 +345,15 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
             logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s, 장애물: %s)",
                             key, current, target, obstacles)
             yield env.timeout(0.5)
+            recalc_attempts += 1
+            if recalc_attempts >= max_recalc_attempts:
+                logging.error("%s: 최대 경로 재계산 시도 횟수 초과. 이동 중단.", key)
+                return
             continue
+
         logging.debug("%s 전체 경로: %s", key, path)
         moved = False
-        # 셀 예약 적용: 각 셀로 이동하기 전에 예약 시도
+        # 각 셀로 이동 전에 예약 시도 (예약 대기 타임아웃 적용)
         for i, next_pos in enumerate(path[1:], start=1):
             with data_lock:
                 if shared_data["statuses"][key] == "STOP":
@@ -384,9 +392,15 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
                 logging.info("[%s] %s 도착 -> %s", datetime.now().isoformat(), key, target)
                 return
             current = next_pos
+
         if not moved:
+            recalc_attempts += 1
             logging.info("%s: 경로 재계산을 위해 대기 (%s)", key, current)
             yield env.timeout(0.5)
+            if recalc_attempts >= max_recalc_attempts:
+                logging.error("%s: 최대 재계산 시도 횟수 초과. 이동 중단.", key)
+                return
+
 
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
