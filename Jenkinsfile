@@ -22,6 +22,14 @@ pipeline {
                 }
             }
         }
+        
+        stage('Build Simulation') {
+            steps {
+                dir('simulation') {
+                    sh 'docker build -t simulation-app:latest .'
+                }
+            }
+        }
 
         stage('Build Frontend (React)') {
             steps {
