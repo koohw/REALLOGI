@@ -2,6 +2,9 @@ import React from "react";
 import AGVMonitoring from "../components/AGVMonitoring";
 import Sidebar from "../components/Sidebar";
 
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+
 function SimulationPage() {
   const maps = [
     [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
@@ -20,10 +23,10 @@ function SimulationPage() {
 
   // 각 시뮬레이션 인스턴스를 고유한 serverUrl로 렌더링
   const simulationConfigs = [
-    { id: 0, serverUrl: "http://localhost:5001" },
-    { id: 1, serverUrl: "http://localhost:5002" },
-    { id: 2, serverUrl: "http://localhost:5003" },
-    { id: 3, serverUrl: "http://localhost:5004" },
+    { id: 0, serverUrl: BASE_URL + "/sim1" },
+    { id: 1, serverUrl: BASE_URL + "/sim2" },
+    { id: 2, serverUrl: BASE_URL + "/sim3" },
+    { id: 3, serverUrl: BASE_URL + "/sim4" }
   ];
 
   return (
