@@ -8,7 +8,7 @@ import smbus
 import math
 import RPi.GPIO as GPIO
 
-# \ucd08\uc74c\ud30c \uc13c\uc11c \uc124\uc815
+# 초음파 센서 설정
 GPIO.setmode(GPIO.BOARD)
 TRIG = 7
 ECHO = 15
@@ -32,16 +32,16 @@ def get_distance():
     distance = round(distance, 2)
     return distance
 
-# MQTT \uc124\uc815
+# MQTT 설정
 BROKER = "broker.hivemq.com"
 PORT = 1883
-TOPIC_QR_INFO = "agv/qr_info"         # QR \uac10\uc9c0 \uc2dc \uc815\ubcf4 \uc804\uc1a1
+TOPIC_QR_INFO = "agv/qr_info"         # QR 감지 시 정보 전송
 TOPIC_SIMPY_TO_AGV = "simpy/commands"
-TOPIC_OBSTACLE = "agv/obstacle"       # \uc7a5\uc560\ubb3c \uac10\uc9c0 \uc2dc \uc815\ubcf4 \uc804\uc1a1
+TOPIC_OBSTACLE = "agv/obstacle"       # 장애물 감지 시 정보 전송
 
-mqtt_received_path = []  # MQTT\ub85c \ubc1b\uc740 \uc804\uccb4 \uacbd\ub85c \ub9ac\uc2a4\ud2b8
-mqtt_received_command = None # MQTT\ub85c \ubc1b\uc740 \uc6d0\uaca9 \uba85\ub839 (STOP, RESUME, TURN)
-mqtt_path_received = False    # PATH \uba85\ub839\uc774 \uc218\uc2e0\ub418\uc5c8\ub294\uc9c0 \uc5ec\ubd80
+mqtt_received_path = []  # MQTT로 받은 전체 경로 리스트
+mqtt_received_command = None  # MQTT로 받은 원격 명령 (STOP, RESUME, TURN)
+mqtt_path_received = False    # PATH 명령 수신 플래그
 
 def on_connect(client, userdata, flags, rc):
     print("[MQTT] on_connect rc =", rc)
@@ -54,26 +54,26 @@ def on_message(client, userdata, msg):
         payload = json.loads(msg.payload.decode())
         cmd = payload.get('command')
         if cmd == 'STOP':
-            print("[MQTT] AGV \uc815\uc9c0 \uba85\ub839 \uc218\uc2e0")
+            print("[MQTT] AGV 정지 명령 수신")
             mqtt_received_command = 'STOP'
         elif cmd == 'RESUME':
-            print("[MQTT] AGV \uc7ac\uc2dc\uc791 \uba85\ub839 \uc218\uc2e0")
+            print("[MQTT] AGV 재시작 명령 수신")
             mqtt_received_command = 'RESUME'
         elif cmd == 'TURN':
-            print("[MQTT] AGV \ud68c\uc804 \uba85\ub839 \uc218\uc2e0")
+            print("[MQTT] AGV 회전 명령 수신")
             mqtt_received_command = 'TURN'
         elif cmd == 'PATH':
             full_path = payload.get('data', {}).get('full_path', [])
-            print("[MQTT] PATH \uba85\ub839 \uc218\uc2e0 =", full_path)
+            print("[MQTT] PATH 명령 수신 =", full_path)
             mqtt_received_path = full_path
-            mqtt_path_received = True  # \uacbd\ub85c \uc218\uc2e0 \ud50c\ub798\uadf8
+            mqtt_path_received = True  # 경로 수신 플래그
         else:
-            print("[MQTT] \uc54c \uc218 \uc5c6\ub294 \uba85\ub839 \uc218\uc2e0:", cmd)
+            print("[MQTT] 알 수 없는 명령 수신:", cmd)
     except Exception as e:
-        print("[MQTT] on_message \uc624\ub958:", e)
+        print("[MQTT] on_message 오류:", e)
 
 # ------------------------
-# [MQTT \ud074\ub77c\uc774\uc5b8\ud2b8 \ucd08\uae30\ud654]
+# [MQTT 라이브러리 초기화]
 # ------------------------
 mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311)
 mqtt_client.on_connect = on_connect
@@ -81,7 +81,7 @@ mqtt_client.on_message = on_message
 mqtt_client.connect(BROKER, PORT, 60)
 mqtt_client.loop_start()
 
-# --- \ubaa8\ud130 \uc81c\uc5b4 \ud074\ub798\uc2a4 ---
+# --- 모터 제어 드라이버 ---
 class MotorDriver:
     def __init__(self):
         self.PWMA = 0
@@ -90,13 +90,13 @@ class MotorDriver:
         self.PWMB = 5
         self.BIN1 = 3
         self.BIN2 = 4
-        # PCA9685 debug=False \uc124\uc815 -> I2C \ub808\uc9c0\uc2a4\ud130 \ub85c\uadf8\uac00 \ub728\uc9c0 \uc54a\ub3c4\ub85d 
+        # PCA9685 debug=False 설정 -> I2C 레지스터로 구동되지 않도록
         self.pwm = PCA9685(0x40, debug=False)
         self.pwm.setPWMFreq(50)
 
     def MotorRun(self, motor, direction, speed):
         speed = min(speed, 100)
-        if motor == 0:  # \uc67c\ucabd \ubaa8\ud130
+        if motor == 0:  # 왼쪽 모터
             self.pwm.setDutycycle(self.PWMA, int(speed))
             if direction == 'forward':
                 self.pwm.setLevel(self.AIN1, 0)
@@ -104,7 +104,7 @@ class MotorDriver:
             else:
                 self.pwm.setLevel(self.AIN1, 1)
                 self.pwm.setLevel(self.AIN2, 0)
-        else:  # \uc624\ub978\ucabd \ubaa8\ud130
+        else:  # 오른쪽 모터
             self.pwm.setDutycycle(self.PWMB, int(speed))
             if direction == 'forward':
                 self.pwm.setLevel(self.BIN1, 0)
@@ -114,7 +114,7 @@ class MotorDriver:
                 self.pwm.setLevel(self.BIN2, 0)
 
     def MotorStop(self, motor=None):
-        # motor\uac00 None\uc774\uba74 \ubaa8\ub4e0 \ubaa8\ud130 \uc815\uc9c0
+        # motor가 None이면 모든 모터 정지
         if motor is None:
             self.pwm.setDutycycle(self.PWMA, 0)
             self.pwm.setDutycycle(self.PWMB, 0)
@@ -123,7 +123,7 @@ class MotorDriver:
         else:
             self.pwm.setDutycycle(self.PWMB, 0)
 
-# --- PID \ucee8\ud2b8\ub864\ub7ec \ud074\ub798\uc2a4 ---
+# --- PID 제어 드라이버 ---
 class PID:
     def __init__(self, kp, ki, kd):
         self.kp = kp
@@ -139,7 +139,7 @@ class PID:
         self.prev_error = error
         return output
 
-# --- \ube68\uac04\uc0c9 \ub77c\uc778 \uac80\ucd9c \ud568\uc218 ---
+# --- 빨간색 라인 검출 함수 ---
 lower_red1 = np.array([0, 100, 100])
 upper_red1 = np.array([10, 255, 255])
 lower_red2 = np.array([160, 100, 100])
@@ -155,7 +155,7 @@ def detect_red_line(frame):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-    # mask \ub514\ubc84\uae45 \ud654\uba74
+    # mask 디버그 화면
     cv2.imshow("Red Mask", mask)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -168,7 +168,7 @@ def detect_red_line(frame):
             return True, (cx, cy), mask
     return False, None, mask
 
-# --- QR \ucf54\ub4dc \uac80\ucd9c \ud568\uc218 ---
+# --- QR 코드 검출 함수 ---
 def detect_qr_code(frame):
     qr_detector = cv2.QRCodeDetector()
     data, points, _ = qr_detector.detectAndDecode(frame)
@@ -179,21 +179,28 @@ def detect_qr_code(frame):
         return True, (cx, cy), data
     return False, None, None
 
-# \ud68c\uc804 \ud568\uc218
-def rotate_90_degrees(motor):
+# 오른쪽 회전 함수
+def rignt_rotate_90_degrees(motor):
     motor.MotorRun(0, 'forward', 80)
     motor.MotorRun(1, 'backward', 80)
-    time.sleep(1)  # 90\ub3c4 \ud68c\uc804\uc5d0 \ud544\uc694\ud55c \uc2dc\uac04 \uc870\uc815
+    time.sleep(1)  # 90도 회전에 필요한 시간 지정
     motor.MotorStop() 
 
+# 왼쪽 회전 함수
+def left_rotate_90_degrees(motor):
+    motor.MotorRun(0, 'backward', 80)
+    motor.MotorRun(1, 'forward', 80)
+    time.sleep(1)  # 90도 회전에 필요한 시간 지정
+    motor.MotorStop()
+
 # ------------------------
-# [\ub77c\uc778\ud2b8\ub798\ud0b9 \uba54\uc778 \ud568\uc218]
-#  - \uc774 \ud568\uc218\ub294 PATH \uc218\uc2e0 \ud6c4\uc5d0\ub9cc \ud638\ucd9c\ub428
+# [라인 트랙킹 및 QR 코드 검출 함수]
+#  - 이 함수는 PATH 명령이 수신된 후에만 동작
 # ------------------------
 def line_following_with_qr():
     global mqtt_received_command, mqtt_received_path
 
-    # \uc5ec\uae30\uc11c\ubd80\ud130 \uc2e4\uc81c \ud558\ub4dc\uc6e8\uc5b4 \ucd08\uae30\ud654 (\ub85c\uadf8\ub294 \uc5ec\uae30\uc11c\ubd80\ud130 \uc2dc\uc791)
+    # 웹캠으로부터 실시간 하드웨어 초기화 (로직은 웹캠에서 시작)
     motor = MotorDriver()
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -201,34 +208,34 @@ def line_following_with_qr():
     cap.set(cv2.CAP_PROP_BRIGHTNESS, 0.2)
    
     if not cap.isOpened():
-        print("\uce74\uba54\ub77c\ub97c \uc5f4 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.")
+        print("카메라를 열 수 없습니다.")
         return
 
     ret, frame = cap.read()
     if not ret:
-        print("\ud504\ub808\uc784\uc744 \uc77d\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.")
+        print("프레임을 읽는데 실패했습니다.")
         return
 
     frame_height, frame_width = frame.shape[:2]
     frame_center = frame_width // 2
 
-    # PID \ubc0f \uc18d\ub3c4 \uc124\uc815
+    # PID 및 속도 설정
     pid = PID(kp=0.1, ki=0.0, kd=0.01)
     original_speed = 40 # cm/s
-    slow_speed = 8      # QR \uac10\uc9c0\ub97c \uc704\ud55c \uac10\uc18d \uc2dc \uc18d\ub3c4 
+    slow_speed = 8      # QR 감지를 위한 느린 속도
     target_speed = original_speed
     prev_time = time.time()
     prev_correction = 0
 
-    # \uc0c1\ud0dc \uc815\uc758
-    STATE_WAIT_START = 0    # MQTT \ud1b5\uc2e0 \uc644\ub8cc \uc804 \ub300\uae30 (\ucd9c\ubc1c\uc9c0 QR \uc5c6\uc570)
-    STATE_ACTIVE     = 1    # \ub77c\uc778\ud2b8\ub808\uc774\uc2f1
-    STATE_STOP       = 2    # \uc815\uc9c0
+    # 상태 변수
+    STATE_WAIT_START = 0    # MQTT 통신 완료 전 대기 (출발 전 QR 없음)
+    STATE_ACTIVE     = 1    # 라인트랙킹 중
+    STATE_STOP       = 2    # 정지
     state = STATE_WAIT_START
     start_active_time = None
     distance_traveled = 0
 
-    # \ub514\ubc84\uae45\uc6a9 \ucf54\ub4dc. \ub9c8\uc9c0\ub9c9 \uac70\ub9ac \ucd9c\ub825 \uc2dc\uac01
+    # 마지막 거리 출력 시간
     last_distance_print = time.time()
 
     try:
@@ -237,16 +244,16 @@ def line_following_with_qr():
             dt = current_time - prev_time
             prev_time = current_time
 
-            # \ucd08\uc74c\ud30c \uc13c\uc11c\ub85c 1\ucd08\ub9c8\ub2e4 \uac70\ub9ac \uce21\uc815
+            # 초음파 센서로 1초마다 측정 값 출력
             distance = get_distance()
             if current_time - last_distance_print >= 1.0:
-                print(f"[DEBUG] \ucd08\uc74c\ud30c \uc13c\uc11c \uce21\uc815 \uac70\ub9ac: {distance} cm")
+                print(f"[DEBUG] 초음파 센서 측정 값: {distance} cm")
                 last_distance_print = current_time
 
-            # 30cm \uc774\ub0b4 \ubb3c\uccb4 \uac10\uc9c0 \uc2dc \uc774\uc0c1 \ubb3c\uccb4\ub85c \ud310\ub2e8.
-            # \ubaa8\ud130 \uc815\uc9c0 \ubc0f MQTT \uc804\uc1a1 
+            # 30cm 이하일 경우 장애물 감지로 처리
+            # 모터 정지 및 MQTT 전송
             if distance < 30:
-                print("\uc774\uc0c1 \ubb3c\uccb4\uac00 \uac10\uc9c0\ub429\ub2c8\ub2e4. \uce74\uba54\ub77c\ub97c \ud655\uc778\ud574\uc8fc\uc138\uc694.")
+                print("장애물이 감지되었습니다. 카메라를 확인해주세요.")
                 motor.MotorStop()
                 mqtt_client.publish(TOPIC_OBSTACLE, json.dumps({"distance": distance}))
                 time.sleep(1)
@@ -254,17 +261,17 @@ def line_following_with_qr():
 
             ret, frame = cap.read()
             if not ret:
-                print("\ud504\ub808\uc784 \uc77d\uae30 \uc2e4\ud328")
+                print("프레임을 읽는데 실패했습니다.")
                 break
             
-            # MQTT \uc6d0\uaca9 \uba85\ub839 \ucc98\ub9ac (STOP, RESUME, TURN)
+            # MQTT 원격 명령 처리 (STOP, RESUME, TURN)
             if mqtt_received_command is not None:
                 if mqtt_received_command == 'STOP':
-                    print("Remote STOP \uba85\ub839 \uc2e4\ud589")
+                    print("Remote STOP 명령 실행")
                     motor.MotorStop()
                     state = STATE_STOP
                     mqtt_received_command = None
-                    # \uc6d0\uaca9 \uc815\uc9c0 \uc2dc, \ud654\uba74\uc5d0 \uc0c1\ud0dc \ud45c\uc2dc \ud6c4 \ub2e4\uc74c \ub8e8\ud504\ub85c
+                    # 원격 정지 시, 화면에 상태 출력 후 다음 루프로
                     cv2.putText(frame, "REMOTE STOP", (10, 150),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                     cv2.imshow("Frame", frame)
@@ -272,23 +279,23 @@ def line_following_with_qr():
                     continue
 
                 elif mqtt_received_command == 'RESUME':
-                        print("Remote RESUME \uba85\ub839 \uc2e4\ud589")
+                        print("Remote RESUME 명령 실행")
                         state = STATE_ACTIVE
                         if start_active_time is None:
                             start_active_time = current_time
                         mqtt_received_command = None
                 
                 elif mqtt_received_command == 'TURN':
-                        print("Remote TURN \uba85\ub839 \uc2e4\ud589")
+                        print("Remote TURN 명령 실행")
                         motor.MotorStop()
                         rotate_90_degrees(motor)
                         mqtt_received_command = None
 
-            # \uc0c1\ud0dc\uc5d0 \ub530\ub978 \ub3d9\uc791 \ucc98\ub9ac 
+            # 상태에 따른 동작 처리
             if state == STATE_WAIT_START:
-                    # MQTT \ud1b5\uc2e0\uc774 \uc644\ub8cc\ub418\uba74 \ubc14\ub85c \ub77c\uc778\ud2b8\ub798\uc2f1 \uc2dc\uc791
+                    # MQTT 통신이 완료되면 바로 라인트랙킹 시작
                     if mqtt_received_path:
-                        print("MQTT \ud1b5\uc2e0 \uc644\ub8cc \u2013 \ud65c\uc131 \uc0c1\ud0dc \uc804\ud658 (\ub77c\uc778\ud2b8\ub798\ud0b9 \uc2dc\uc791)")
+                        print("MQTT 통신 완료 – 상태 전환 (라인트랙킹 시작)")
                         state = STATE_ACTIVE
                         start_active_time = current_time
                     else:
@@ -297,47 +304,35 @@ def line_following_with_qr():
                         motor.MotorStop()
 
             elif state == STATE_ACTIVE:
-                # \ub204\uc801 \uc774\ub3d9\uac70\ub9ac\uc5d0 \ub530\ub77c \ubaa9\ud45c \uc18d\ub3c4 \ubcc0\uacbd (\uc774\ub3d9\uac70\ub9accm = \ub2e8\uc21c\uc18d\ub3c4 * \uc2dc\uac04)
-                # \ub204\uc801 \uc774\ub3d9\uac70\ub9ac \uacc4\uc0b0 (cm \ub2e8\uc704, \ub2e8\uc21c \uc18d\ub3c4 * \uc2dc\uac04)
+                # 누적 이동거리에 따라 목표 속도 변경 (이동거리cm = 단순속도 * 시간)
+                # 누적 이동거리 계산 (cm 단위, 단순 속도 * 시간)
                 distance_traveled = (current_time - start_active_time) * original_speed
                 
                 # distance_travled cv2 imshow
                 cv2.putText(frame, f"Distance: {distance_traveled:.1f} cm", (10, 60),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                if distance_traveled < 150:
+                if distance_traveled < 50:
                     target_speed = original_speed
                 else:
                     target_speed = slow_speed
 
-                # 50cm \uc774\uc0c1 \uc774\ub3d9\ud55c \ud6c4 QR \ucf54\ub4dc \uac10\uc9c0 \uc2dc\ub3c4
-                if distance_traveled >= 150:
+                # 50cm 이상 주행 후 QR 코드 감지 시도
+                if distance_traveled >= 50:
                     qr_detected, qr_centroid, qr_data = detect_qr_code(frame)
                     if qr_detected:
-                    	 # QR \ucf54\ub4dc \uac10\uc9c0 -> STRAIGHT
-                        # print("\ub77c\uc778\ud2b8\ub798\ud0b9 \uc911 QR \ucf54\ub4dc \uac10\uc9c0 \u2013 \uc815\uc9c0 \ubc0f \uba85\ub839 \ub300\uae30")
-                        # motor.MotorStop()
-                        # MQTT\ub85c QR \uc815\ubcf4 \uc804\uc1a1
-                        # qr_info = {"position": qr_centroid, "data": qr_data}
-                        # mqtt_client.publish(TOPIC_QR_INFO, json.dumps(qr_info))
-                        # time.sleep(1)
-                        # \uc7ac\uc2dc\uc791: \uc0c1\ud0dc\ub97c ACTIVE\ub85c \uc804\ud658\ud558\uace0 \uc774\ub3d9\uac70\ub9ac \uce21\uc815 \ucd08\uae30\ud654
-                        # state = STATE_ACTIVE
-                        # start_active_time = time.time()
-                        # target_speed = original_speed
-                        # continue
                         print("QR DETECT -> 90 TURN")
                         motor.MotorStop()
                         qr_info = {"position": qr_centroid, "data": qr_data}
                         mqtt_client.publish(TOPIC_QR_INFO, json.dumps(qr_info))
-                        # TURN
-                        rotate_90_degrees(motor)
+                        # 90도 회전 실행
+                        rignt_rotate_90_degrees(motor)
                         time.sleep(1)
-                        # \uc7ac\uc2dc\uc791: \uc0c1\ud0dc\ub97c ACTIVE\ub85c \uc804\ud658\ud558\uace0 \uc774\ub3d9\uac70\ub9ac \uce21\uc815 \ucd08\uae30\ud654
+                        # 재시작: 상태를 ACTIVE로 전환 및 주행 시간 초기화
                         start_active_time = time.time()
                         target_speed = original_speed
                         continue
                 
-                # \ube68\uac04\uc0c9 \ub77c\uc778 \uac80\ucd9c \ubc0f PID \ubcf4\uc815
+                # 빨간색 라인 검출 및 PID 제어
                 detected, centroid, mask = detect_red_line(frame)
                 if detected and centroid is not None:
                     cx, cy = centroid
@@ -348,15 +343,14 @@ def line_following_with_qr():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     error = cx - frame_center
                     correction = pid.update(error, dt)
-                    # \ubcf4\uc815\uac12\uc758 \uae09\uaca9\ud55c \ubcc0\ud654 \uc81c\ud55c
+                    # 보정값의 급격한 변화를 제한
                     max_delta = 2
                     delta = correction - prev_correction
                     if abs(delta) > max_delta:
                         correction = prev_correction + max_delta * np.sign(delta)
                     prev_correction = correction
 
-                    # \ub450 \ubaa8\ud130 \ubaa8\ub450 \uc804\uc9c4\uc2dc\ud0a4\ub418, \uc18d\ub3c4 \ucc28\uc774\ub97c \ud1b5\ud574 \ud68c\uc804 \ubcf4\uc815  
-                    # (\ucd5c\uc18c \uc18d\ub3c4(min_speed)\ub97c \uc720\uc9c0\ud558\uc5ec \ud55c\ucabd \ubaa8\ud130\uac00 \uac70\uc758 \uba48\ucd94\uc9c0 \uc54a\ub3c4\ub85d \ud568)
+                    # 좌, 우 모터 속도 조정을 통한 회전 보정 (최소 속도 유지)
                     min_speed = 10
                     left_speed = target_speed + correction
                     right_speed = target_speed - correction
@@ -369,63 +363,52 @@ def line_following_with_qr():
                                 (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     print(f"[ACTIVE] error: {error:.2f}, correction: {correction:.2f}, L: {left_speed:.1f}, R: {right_speed:.1f}")
                 else:
-                    # # \ub77c\uc778 \ubbf8\uac80\ucd9c \uc2dc \uc774\uc804 \ubcf4\uc815\uac12\uc744 \uc11c\uc11c\ud788 \uac10\uc1e0\ud558\uba70 \uc804\uc9c4
-                    # prev_correction *= 0.9
-                    # left_speed = target_speed + prev_correction
-                    # right_speed = target_speed - prev_correction
-                    # left_speed = max(4, min(100, left_speed))
-                    # right_speed = max(4, min(100, right_speed))
-                    # motor.MotorRun(0, 'forward', left_speed)
-                    # motor.MotorRun(1, 'forward', right_speed)
-                    # cv2.putText(frame, "Line not detected", (10, 30),
-                    #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-                    # \ub3cc\ubc1c \uc0c1\ud669: \uc804\uccb4 \ud654\uba74\uc5d0\uc11c \ube68\uac04\uc0c9 \ub77c\uc778\uc774 \uac80\ucd9c\ub418\uc9c0 \uc54a\uc73c\uba74 emergency
-                    print("\ub3cc\ubc1c \uc0c1\ud669: \ube68\uac04\uc0c9 \ub77c\uc778 \ubbf8\uac80\ucd9c!")
+                    # 긴급 상황: 빨간색 라인이 감지되지 않음!
+                    print("긴급 상황: 빨간색 라인 미검출!")
                     motor.MotorStop()
                     mqtt_client.publish(TOPIC_OBSTACLE, json.dumps({"emergency": True}))
                     time.sleep(1)
                     continue
 
-                
             elif state == STATE_STOP:
                 motor.MotorStop()
                 cv2.putText(frame, "Stopped, waiting for command", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                # \uc6d0\uaca9 \uc815\uc9c0 \uc2dc, \ubcc4\ub3c4\uc758 \uc785\ub825 \ub300\uae30 \ub8e8\ud2f4 \uc5c6\uc774 MQTT\ub85c RESUME \uba85\ub839\uc744 \ubc1b\uc73c\uba74 \uc7ac\uc2dc\uc791
-                print("\uc815\uc9c0 \uc0c1\ud0dc: RESUME \uc785\ub825 \uc2dc \uc7ac\uac00\ub3d9")
+                # 정지 상태: RESUME 입력 시 재시작
+                print("정지 상태: RESUME 입력 시 재시작")
                 cmd = input()
                 if cmd.strip().upper() == "RESUME":
-                    print("\uc7ac\uc2dc\uc791 \uba85\ub839 \uc218\uc2e0 \u2013 \ud65c\uc131 \uc0c1\ud0dc\ub85c \uc804\ud658")
+                    print("재시작 명령 – 상태 전환하여 라인트랙킹 시작")
                     state = STATE_ACTIVE
-                    start_active_time = time.time()  # \uc774\ub3d9\uac70\ub9ac \uae30\uc900 \ucd08\uae30\ud654
+                    start_active_time = time.time()  # 주행 시간 초기화
                 else:
-                    print("\uc54c \uc218 \uc5c6\ub294 \uba85\ub839. \uacc4\uc18d \uc815\uc9c0\ud569\ub2c8\ub2e4.")
+                    print("알 수 없는 명령. 다시 정지합니다.")
 
             cv2.imshow("Frame", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
     except KeyboardInterrupt:
-        print("Ctrl+C \uc785\ub825, \ubaa8\ud130\ub97c \uc815\uc9c0\ud569\ub2c8\ub2e4.")
+        print("Ctrl+C 입력, 모터를 정지합니다.")
     finally:
         motor.MotorStop()
         cap.release()
         cv2.destroyAllWindows()
         GPIO.cleanup()
+
 # ------------------------
-# [\uba54\uc778 \ud568\uc218]
-#  - 1) MQTT PATH \uc218\uc2e0 \uc804\uae4c\uc9c0 \ub300\uae30
-#  - 2) PATH\uac00 \uc218\uc2e0\ub418\uba74 \ub77c\uc778\ud2b8\ub798\ud0b9 \ud568\uc218 \ud638\ucd9c
+# [메인 함수]
+#  - 1) MQTT PATH 수신 전까지 대기
+#  - 2) PATH가 수신되면 라인트랙킹 함수 실행
 # ------------------------
 def main():
     global mqtt_path_received
-    print("[MAIN] MQTT\uc5d0\uc11c PATH\ub97c \uae30\ub2e4\ub9ac\ub294 \uc911...")
-    # PATH \uc218\uc2e0\ub420 \ub54c\uae4c\uc9c0 \ub300\uae30
+    print("[MAIN] MQTT에서 PATH를 기다리는 중...")
+    # PATH 수신될 때까지 대기
     while not mqtt_path_received:
         time.sleep(1)
 
-    print("[MAIN] PATH \uc218\uc2e0\ub428! \ub77c\uc778\ud2b8\ub798\ud0b9 \uc2dc\uc791...")
+    print("[MAIN] PATH 수신 완료! 라인트랙킹 시작...")
     line_following_with_qr()
 
 if __name__ == '__main__':
