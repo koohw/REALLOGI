@@ -1,7 +1,7 @@
 // services/agvService.js
 
 // 추후 aws에 배포할 때 API_BASE_URL을 변경해야 함
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "http://localhost:2025/moni";
 
 export const agvService = {
   // AGV 상태 스트림 받기
@@ -39,6 +39,17 @@ export const agvService = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ agvIds }),
+    }).then((res) => res.json());
+  },
+
+  // AGV 작업 시작 명령 (단순 "start" 명령 전송)
+  startAgv: async () => {
+    return await fetch(`${API_BASE_URL}/agv/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ command: "start" }),
     }).then((res) => res.json());
   },
 };
