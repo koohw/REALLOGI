@@ -19,7 +19,7 @@ else:
     transform = midas_transforms.small_transform
 
 # 웹캠 열기 (기본 카메라 사용)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(2)
 if not cap.isOpened():
     print("웹캠을 열 수 없습니다.")
     exit()

@@ -179,12 +179,19 @@ def detect_qr_code(frame):
         return True, (cx, cy), data
     return False, None, None
 
-# 회전 함수
-def rotate_90_degrees(motor):
+# 오른쪽 회전 함수
+def rignt_rotate_90_degrees(motor):
     motor.MotorRun(0, 'forward', 80)
     motor.MotorRun(1, 'backward', 80)
-    time.sleep(1)  # 90도 회전에 필요한 시간 조정
+    time.sleep(1)  # 90도 회전에 필요한 시간 지정
     motor.MotorStop() 
+
+# 왼쪽 회전 함수
+def left_rotate_90_degrees(motor):
+    motor.MotorRun(0, 'backward', 80)
+    motor.MotorRun(1, 'forward', 80)
+    time.sleep(1)  # 90도 회전에 필요한 시간 지정
+    motor.MotorStop()
 
 # ------------------------
 # [라인트래킹 메인 함수]
@@ -330,7 +337,7 @@ def line_following_with_qr():
                         qr_info = {"position": qr_centroid, "data": qr_data}
                         mqtt_client.publish(TOPIC_QR_INFO, json.dumps(qr_info))
                         # TURN
-                        rotate_90_degrees(motor)
+                        rignt_rotate_90_degrees(motor)
                         time.sleep(1)
                         # 재시작: 상태를 ACTIVE로 전환하고 이동거리 측정 초기화
                         start_active_time = time.time()

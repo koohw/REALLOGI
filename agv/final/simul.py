@@ -8,6 +8,9 @@ import smbus
 # import RPi.GPIO as GPIO
 from PCA9685 import PCA9685  # 젯슨 오린나노에 맞게 I2C 버스 번호 조정
 
+import sys
+sys.path.append()
+
 # -------------------------------
 # Global 설정: 회전/주행용 MotorDriver 참조 코드
 # -------------------------------
