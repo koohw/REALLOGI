@@ -30,7 +30,7 @@ export const agvService = {
   getAgvStream: () => {
     // URL이 올바르게 구성되었는지 확인을 위한 로깅
     const streamUrl = API_BASE_URL+'/moni/agv-stream';
-    console.log('Stream URL:', API_BASE_URL);
+    console.log('Stream URL:', streamUrl);
     
     return new EventSource(streamUrl, {
         withCredentials: true
