@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AGVMap from "../components/AGVMap";
 import VideoPopup from "../components/VideoPopup";
+import { agvService } from "../api/agvService";
 
 function MonitorPage() {
   const [showVideo, setShowVideo] = useState(false);
@@ -16,6 +17,15 @@ function MonitorPage() {
     }
   };
 
+  const handleStartOperation = async () => {
+    try {
+      const response = await agvService.startAgv();
+      console.log("작업 시작 응답:", response);
+    } catch (error) {
+      console.error("작업 시작 에러:", error);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-[#0D1B2A]">
       {/* Left sidebar area */}
@@ -27,12 +37,12 @@ function MonitorPage() {
       <div className="flex-1 flex flex-col">
         {/* Header with controls */}
         <div className="p-4 border-b border-gray-700 bg-[#11263f] flex justify-between items-center">
-          {/* Video Toggle Button */}
+          {/* 작업 시작 버튼 (비디오 토글 버튼 대신) */}
           <button
-            onClick={() => setShowVideo(!showVideo)}
+            onClick={handleStartOperation}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
-            {showVideo ? "비디오 닫기" : "비디오 열기"}
+            작업 시작
           </button>
 
           {/* View Toggle Buttons */}
