@@ -760,7 +760,7 @@ def run_server(port):
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
 def start_multi_server():
-    ports = [5001,5002,5003,5004]
+    ports = [2026,2027,2028,2029]
     processes = []
     try:
         for port in ports:
@@ -770,6 +770,7 @@ def start_multi_server():
             print(f"Started server process on port {port}")
         for process in processes:
             process.join()
+            
     except KeyboardInterrupt:
         print("\nShutting down servers...")
         for process in processes:
