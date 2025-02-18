@@ -18,6 +18,7 @@ import {
   updateOrderTotal,
   updateOrderSuccess,
 } from "../features/agvSlice";
+import { agvService } from "../api/agvService";
 
 const AnalyticsView = () => {
   const dispatch = useDispatch();
@@ -29,7 +30,7 @@ const AnalyticsView = () => {
 
   // SSE 구독: 효율성 값이 변할 때만 updateAGVData 액션을 디스패치합니다.
   useEffect(() => {
-    const eventSource = new EventSource("http://localhost:5000/api/agv-stream");
+    const eventSource = agvService.getAgvStream();
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -67,10 +68,10 @@ const AnalyticsView = () => {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error("SSE Error:", error);
-      eventSource.close();
-    };
+    // eventSource.onerror = (error) => {
+    //   console.error("SSE Error:", error);
+    //   eventSource.close();
+    // };
 
     return () => {
       eventSource.close();
