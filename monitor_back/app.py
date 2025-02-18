@@ -138,7 +138,7 @@ def resume_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "재시작(RESUME) 명령이 전송되었습니다.", "results": results})
 
-@app.route("/api/agv/start", methods=["POST"])
+@app.route("/moni/agv/start", methods=["POST"])
 def start_simulation():
     """
     AGV 시뮬레이션 시작 명령:
@@ -161,7 +161,7 @@ def start_simulation():
             sim_thread.start()
             return jsonify({"success": True, "message": "시뮬레이션이 시작되었습니다."})
 
-@app.route("/api/agv-stream")
+@app.route("/moni/agv-stream")
 def sse():
     def event_stream():
         default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
