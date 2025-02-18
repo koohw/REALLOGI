@@ -21,6 +21,9 @@ CORS(app, resources={
     }
 })
 
+# 전역 변수: 시뮬레이션 시작 여부
+simulation_started = False
+
 def convert_agv_id(agv_str):
     """
     "AGV001" 형태 -> "AGV 1" 으로 변환
@@ -135,7 +138,30 @@ def resume_agv():
                     results.append({"agv_id": agv_id, "status": "error", "error": "지정된 AGV를 찾을 수 없습니다."})
     return jsonify({"success": True, "message": "재시작(RESUME) 명령이 전송되었습니다.", "results": results})
 
-@app.route("/moni/agv-stream")
+@app.route("/api/agv/start", methods=["POST"])
+def start_simulation():
+    """
+    AGV 시뮬레이션 시작 명령:
+      - 요청 데이터: { "command": "start" }
+      - 이 명령을 받으면 시뮬레이션을 백그라운드 스레드로 실행합니다.
+      - 웹의 start 버튼을 눌러야 이 라우트가 호출되어 시뮬레이션이 시작됩니다.
+    """
+    global simulation_started
+    data = request.get_json()
+    command = data.get("command", "").lower()
+    if command != "start":
+        return jsonify({"success": False, "message": "잘못된 명령입니다."}), 400
+
+    with data_lock:
+        if simulation_started:
+            return jsonify({"success": False, "message": "시뮬레이션이 이미 시작되었습니다."}), 400
+        else:
+            simulation_started = True
+            sim_thread = threading.Thread(target=simulation_main, daemon=True)
+            sim_thread.start()
+            return jsonify({"success": True, "message": "시뮬레이션이 시작되었습니다."})
+
+@app.route("/api/agv-stream")
 def sse():
     def event_stream():
         default_keys = ["AGV 1", "AGV 2", "AGV 3", "AGV 4"]
@@ -197,6 +223,7 @@ def sse():
     })
     return response
 
+
 #event_stream(), content_type="text/event-stream")# 
 def start_background_threads():
     sim_thread = threading.Thread(target=simulation_main, daemon=True)
@@ -205,6 +232,7 @@ def start_background_threads():
 if __name__ == '__main__':
     start_background_threads()
     app.run(debug=False, use_reloader=False, host='0.0.0.0',port=2025)
+
 
 
 
