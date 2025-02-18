@@ -39,7 +39,11 @@ dependencies {
 //    testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+jar {
+    enabled = false
+}
 
 test {
     useJUnitPlatform()
+    systemProperty 'spring.profiles.active', 'test'
 }

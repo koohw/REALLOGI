@@ -19,7 +19,6 @@ public class AgvController {
     public AgvController(AGVService agvService) {
         this.agvService = agvService;
     }
-
     @PostMapping("/register")
     public BaseResponse<AGV> createAgv(@RequestBody AGV agv) {
         try {

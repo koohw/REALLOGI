@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>SSE 실시간 AGV 데이터</title>
+  <style>
+    /* 출력 영역 스타일 */
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border: 1px solid #ddd;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    /* 버튼 스타일 (원하는 대로 수정하세요) */
+    button {
+      margin-bottom: 10px;
+      padding: 5px 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>SSE를 통한 AGV 데이터</h1>
+  <!-- Pretty Print 모드를 토글하는 버튼 -->
+  <button id="togglePretty">Pretty Print On</button>
+  <pre id="output"></pre>
+  <script>
+    // 초기 설정: true이면 pretty print, false이면 raw JSON
+    let isPretty = true;
+    
+    const outputEl = document.getElementById("output");
+    const toggleButton = document.getElementById("togglePretty");
+
+    // 토글 버튼 클릭 시 pretty print 모드를 전환합니다.
+    toggleButton.addEventListener("click", function() {
+      isPretty = !isPretty;
+      toggleButton.textContent = isPretty ? "Pretty Print On" : "Pretty Print Off";
+    });
+
+    // SSE 엔드포인트("/stream")에 연결 (서버의 엔드포인트 URL에 맞게 수정하세요)
+    const eventSource = new EventSource("/stream");
+
+    eventSource.onmessage = function(event) {
+      // 서버에서 전송한 JSON 데이터를 파싱합니다.
+      const data = JSON.parse(event.data);
+      console.log("수신 데이터:", data);
+
+      let displayText = "";
+
+      // 데이터 형식이 { agvs: [...] } 인 경우 각 AGV 정보를 개별 항목으로 표시
+      if (data.agvs && Array.isArray(data.agvs)) {
+        data.agvs.forEach(item => {
+          if (isPretty) {
+            displayText += `AGV ID       : ${item.agv_id}\n`;
+            displayText += `AGV Name     : ${item.agv_name}\n`;
+            displayText += `State        : ${item.state}\n`;
+            displayText += `Issue        : ${item.issue}\n`;
+            displayText += `Location     : (${item.location_x}, ${item.location_y})\n`;
+            displayText += `Direction    : ${item.direction}\n`;
+            displayText += `Real Time    : ${item.realtime}\n`;
+            displayText += `Source       : ${item.source || 'N/A'}\n`;
+            displayText += `--------------------------------------\n`;
+          } else {
+            // raw JSON 형식 (한 줄)
+            displayText += JSON.stringify(item) + "\n";
+          }
+        });
+      } else {
+        // 그 외의 경우 JSON 전체를 출력합니다.
+        displayText = isPretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+      }
+
+      // pre 태그에 출력 (공백 보존을 위해 textContent 사용)
+      outputEl.textContent = displayText;
+    };
+
+    eventSource.onerror = function(error) {
+      console.error("SSE 연결 오류:", error);
+    };
+  </script>
+</body>
+</html>

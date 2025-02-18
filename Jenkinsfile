@@ -1,16 +1,24 @@
 pipeline {
     agent any
+    environment {
+        // Jenkins Credentials에서 환경변수 가져오기
+        REACT_ENV = credentials('react-env-credentials')
+    }
     stages {
-
         stage('Build Backend (Spring Boot)') {
             steps {
                 dir('web/dt_back') {
-                    // gradlew 파일에 실행 권한 추가
                     sh 'chmod +x gradlew'
-                    // gradle 빌드 실행 (이후 build/libs 폴더에 jar 파일 생성되어야 합니다)
                     sh './gradlew clean build'
-                    // Docker 이미지 빌드
-                    sh 'docker build -t morjhkim/springboot:latest .'
+                    sh 'docker build -t springboot-app:latest .'
+                }
+            }
+        }
+
+        stage('Build Backend (Flask)') {
+            steps {
+                dir('monitor_back') {
+                    sh 'docker build -t flask-app:latest .'
                 }
             }
         }
@@ -18,19 +26,37 @@ pipeline {
         stage('Build Frontend (React)') {
             steps {
                 dir('web/dt_front') {
-                    sh 'docker build -t morjhkim/react-dt:latest .'
+                    // 환경변수를 임시 .env 파일로 생성
+                    sh '''
+                        echo "REACT_APP_API_URL=${REACT_ENV}" > .env
+                        docker build \
+                            --build-arg REACT_APP_API_URL=${REACT_ENV} \
+                            -t react-app:latest .
+                        rm .env
+                    '''
                 }
             }
         }
 
-        stage('Push Images to Docker Hub') {
+        stage('Deploy Containers') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASS')]) {
-                    sh 'docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASS'
-                    sh 'docker push morjhkim/springboot:latest'
-                    sh 'docker push morjhkim/react-dt:latest'
+                configFileProvider([configFile(fileId: 'docker-composer-add', variable: 'DOCKER_COMPOSE_FILE')]) {
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE down'
+                    sh 'docker system prune -f'  // 불필요한 리소스 정리
+                    sh 'docker-compose -f $DOCKER_COMPOSE_FILE up -d'
                 }
             }
+        }
+    }
+    
+    post {
+        always {
+            // 빌드 완료 후 정리
+            cleanWs()
+        }
+        failure {
+            // 실패 시 로그 출력
+            sh 'docker-compose -f $DOCKER_COMPOSE_FILE logs'
         }
     }
 }

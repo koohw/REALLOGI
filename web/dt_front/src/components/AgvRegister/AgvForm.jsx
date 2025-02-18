@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { useAuth } from "../../hooks/useAuth";
+import { agvApi } from "../../api/agvApi";
+
+
 
 export default function AgvForm({ onSubmit }) {
   const { user } = useAuth();
@@ -11,9 +13,7 @@ export default function AgvForm({ onSubmit }) {
     agvFootnote: "",
     warehouseId: "",
   });
-
-  const baseUrl = process.env.REACT_APP_API_URL ;
-  const fullUrlforRegist = `${baseUrl}/agvs/register`;
+  
   
 
   useEffect(() => {
@@ -36,19 +36,11 @@ export default function AgvForm({ onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post(fullUrlforRegist, 
-        {
-          ...formData,
-          warehouseId: parseInt(formData.warehouseId),
-        },
-        {
-          withCredentials: true,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      if (response.data.isSuccess) {
+      const response = await agvApi.registerAgv({
+        ...formData,
+        warehouseId: parseInt(formData.warehouseId)
+      });
+      if (response.isSuccess) {
         alert("AGV가 성공적으로 등록되었습니다.");
         // 폼 초기화
         setFormData({
