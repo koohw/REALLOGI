@@ -14,7 +14,6 @@ export const agvService = {
   // AGV 상태 스트림 받기
   getAgvStream: () => {
     const streamUrl = API_BASE_URL + "/moni/agv-stream";
-    console.log("Stream URL:", streamUrl);
     return new EventSource(streamUrl, {
       withCredentials: true,
     });
@@ -37,7 +36,7 @@ export const agvService = {
 
   // AGV 작업 시작 명령
   startAgv: async () => {
-    return await apiClient.post("/moni/agv/start", , { command: "start" });
+    return await apiClient.post("/moni/agv/start", { command: "start" });
   },
 
   // AGV 작업 초기화 명령
