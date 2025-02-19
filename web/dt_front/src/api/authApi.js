@@ -1,15 +1,14 @@
-import axios from 'axios';
+import axios from "axios";
 
 const BASE_URL = process.env.REACT_APP_API_URL;
-
 
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    "Content-Type": "application/json",
+  },
 });
 
 // Request interceptor
@@ -30,9 +29,9 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     const customError = {
-      message: error.response?.data?.message || 'An error occurred',
+      message: error.response?.data?.message || "An error occurred",
       status: error.response?.status,
-      data: error.response?.data
+      data: error.response?.data,
     };
     return Promise.reject(customError);
   }
@@ -41,60 +40,59 @@ apiClient.interceptors.response.use(
 export const authApi = {
   login: async (email, password) => {
     try {
-      console.log('url:', BASE_URL);
-      return await apiClient.post('/api/users/login', { email, password });
+      return await apiClient.post("/api/users/login", { email, password });
     } catch (error) {
-      throw new Error(error.message || 'Login failed');
+      throw new Error(error.message || "Login failed");
     }
   },
 
   logout: async () => {
     try {
-      return await apiClient.post('/api/users/logout');
+      return await apiClient.post("/api/users/logout");
     } catch (error) {
-      throw new Error(error.message || 'Logout failed');
+      throw new Error(error.message || "Logout failed");
     }
   },
 
   getCurrentUser: async () => {
     try {
-      return await apiClient.get('/api/users/current');
+      return await apiClient.get("/api/users/current");
     } catch (error) {
-      throw new Error(error.message || 'Failed to get current user');
+      throw new Error(error.message || "Failed to get current user");
     }
   },
 
   checkEmail: async (email) => {
     try {
-      return await apiClient.get('/api/users/check-email', {
-        params: { email }
+      return await apiClient.get("/api/users/check-email", {
+        params: { email },
       });
     } catch (error) {
-      throw new Error(error.message || 'Email check failed');
+      throw new Error(error.message || "Email check failed");
     }
   },
 
   signup: async (userData) => {
     try {
-      return await apiClient.post('/api/users/signup', userData);
+      return await apiClient.post("/api/users/signup", userData);
     } catch (error) {
-      throw new Error(error.message || 'Signup failed');
+      throw new Error(error.message || "Signup failed");
     }
   },
 
   updateUserInfo: async (updateData) => {
     try {
-      return await apiClient.put('/api/users/update', updateData);
+      return await apiClient.put("/api/users/update", updateData);
     } catch (error) {
-      throw new Error(error.message || 'Update failed');
+      throw new Error(error.message || "Update failed");
     }
   },
 
   getCompanies: async () => {
     try {
-      return await apiClient.get('/api/companies');
+      return await apiClient.get("/api/companies");
     } catch (error) {
-      throw new Error(error.message || 'Failed to fetch companies');
+      throw new Error(error.message || "Failed to fetch companies");
     }
   },
 
@@ -102,9 +100,9 @@ export const authApi = {
     try {
       return await apiClient.get(`/api/users/warehouses/${companyId}`);
     } catch (error) {
-      throw new Error(error.message || 'Failed to fetch warehouses');
+      throw new Error(error.message || "Failed to fetch warehouses");
     }
-  }
+  },
 };
 
 // Usage example:
