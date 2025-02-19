@@ -37,7 +37,7 @@ export const agvService = {
 
   // AGV 작업 시작 명령
   startAgv: async () => {
-    return await apiClient.post("/moni/agv/start");
+    return await apiClient.post("/moni/agv/start", , { command: "start" });
   },
 
   // AGV 작업 초기화 명령
