@@ -1094,20 +1094,44 @@ try:
 except ImportError:
     RealtimeEnvironment = simpy.Environment
 
+# def simulation_main():
+#     env = RealtimeEnvironment(factor=1, strict=False)
+#     NUM_AGV = 4
+#     agv_positions = {}
+#     logs = {}
+#     for i in range(NUM_AGV):
+#         agv_positions[i] = None
+#         logs[i] = []
+#     for i in range(NUM_AGV):
+#         if i == 0:
+#             env.process(agv_process(env, i, agv_positions, logs, AGV1_shelf_coords, AGV1_exit_coords))
+#         else:
+#             env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
+#     env.run(until=float('inf'))
+
 def simulation_main():
     env = RealtimeEnvironment(factor=1, strict=False)
+    stop_event = env.event()
+
+    def monitor_stop():
+        while True:
+            yield env.timeout(0.1)
+            with data_lock:
+                if shared_data.get("stop_simulation", False):
+                    stop_event.succeed()  # stop_event를 트리거하여 env.run() 종료
+                    break
+
+    env.process(monitor_stop())
+
+    # 기존의 AGV 프로세스 등록 등
     NUM_AGV = 4
-    agv_positions = {}
-    logs = {}
-    for i in range(NUM_AGV):
-        agv_positions[i] = None
-        logs[i] = []
     for i in range(NUM_AGV):
         if i == 0:
-            env.process(agv_process(env, i, agv_positions, logs, AGV1_shelf_coords, AGV1_exit_coords))
+            env.process(agv_process(env, i, ...))  # 필요한 인자 전달
         else:
-            env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
-    env.run(until=float('inf'))
+            env.process(agv_process(env, i, ...))
+    
+    env.run(until=stop_event)
 
 if __name__ == "__main__":
     simulation_main()

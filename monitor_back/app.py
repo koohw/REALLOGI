@@ -262,7 +262,8 @@ CORS(app, resources={
     }
 })
 
-# 전역 변수: 시뮬레이션 시작 여부
+# 전역 변수: 시뮬레이션 스레드 및 시작 여부 관리
+simulation_thread = None
 simulation_started = False
 
 def convert_agv_id(agv_str):
@@ -280,7 +281,8 @@ def convert_agv_id(agv_str):
 def compute_start_position(agv_key):
     """
     AGV의 시작 위치를 계산합니다.
-    (참고: simulation.py에서는 AGV 1은 (7, 0), 나머지는 (ROWS-1, (agv_id*2)%COLS)로 지정)
+    예: AGV 1은 (7, 0), 나머지는 simulation.py의 random_start_position() 로직에 따라 계산됨.
+    여기서는 초기화 시 AGV 2~4의 위치를 (11,2), (11,4), (11,6)으로 고정합니다.
     """
     try:
         index = int(agv_key.split()[1])
@@ -288,8 +290,13 @@ def compute_start_position(agv_key):
         index = 1
     if index == 1:
         return (7, 0)
+    elif index == 2:
+        return (11, 2)
+    elif index == 3:
+        return (11, 4)
+    elif index == 4:
+        return (11, 6)
     else:
-        # MAP의 ROWS=12, COLS=15 (simulation.py 기준)
         return (11, (index - 1) * 2 % 15)
 
 def send_stop_command_to_agv(agv_key):
@@ -387,40 +394,43 @@ def start_simulation():
     AGV 시뮬레이션 시작 명령:
       - 요청 데이터: { "command": "start" }
       - 이 명령을 받으면 시뮬레이션을 백그라운드 스레드로 실행합니다.
-      - 웹의 start 버튼을 눌러야 이 라우트가 호출되어 시뮬레이션이 시작됩니다.
+      - 단, 이전에 초기화(initialize) 명령으로 시뮬레이션이 종료된 후여야 합니다.
     """
-    global simulation_started
+    global simulation_started, simulation_thread
     data = request.get_json()
     command = data.get("command", "").lower()
     if command != "start":
         return jsonify({"success": False, "message": "잘못된 명령입니다."}), 400
 
     with data_lock:
-        if simulation_started:
-            return jsonify({"success": False, "message": "시뮬레이션이 이미 시작되었습니다."}), 400
-        else:
-            simulation_started = True
-            sim_thread = threading.Thread(target=simulation_main, daemon=True)
-            sim_thread.start()
-            return jsonify({"success": True, "message": "시뮬레이션이 시작되었습니다."})
+        # 초기화로 인해 중지된 상태라면 stop 플래그를 해제합니다.
+        shared_data["stop_simulation"] = False
+
+    if simulation_started:
+        return jsonify({"success": False, "message": "시뮬레이션이 이미 시작되었습니다."}), 400
+    else:
+        simulation_thread = threading.Thread(target=simulation_main, daemon=True)
+        simulation_thread.start()
+        simulation_started = True
+        return jsonify({"success": True, "message": "시뮬레이션이 시작되었습니다."})
 
 @app.route("/moni/agv/initialize", methods=["POST"])
 def initialize_agv():
     """
     AGV 초기화 명령:
-      - 요청 데이터는 웹이 원하는 아래 형식입니다.
-      - 이 명령을 수신하면 simulation.py의 시뮬레이션을 즉시 중지(모든 AGV 상태를 "STOP"으로 변경)하고,
-        각 AGV를 원래 초기 자리로 되돌립니다.
-      - 초기 위치: AGV 1은 (7, 0), AGV 2/3/4는 simulation.py의 random_start_position() 로직에 따라 계산됨.
+      - 요청 데이터는 아래와 같이 전달됩니다.
+            {
+              "success": true,
+              "message": "작업이 초기화되었습니다."
+            }
+      - 이 명령이 내려지면 simulation.py 내부의 simpy 환경이 즉시 종료되도록 합니다.
+      - 또한, 각 AGV를 원래의 초기 위치로 되돌립니다.
     """
-    global simulation_started
+    global simulation_started, simulation_thread
     with data_lock:
-        # 모든 AGV의 상태를 "STOP"으로 설정하여 현재 진행 중인 작업을 중단
-        for key in shared_data["positions"]:
-            shared_data["statuses"][key] = "STOP"
-            shared_data["target"][key] = None
-
-        # 초기 위치를 직접 재설정 (simulation.py의 초기 로직과 일치하도록)
+        # simpy 종료를 위한 플래그 설정 (simulation_main 내 모니터 프로세스가 이를 체크해야 함)
+        shared_data["stop_simulation"] = True
+        # 각 AGV를 초기 위치로 재설정 (여기서는 AGV 1: (7,0), AGV 2: (11,2), AGV 3: (11,4), AGV 4: (11,6))
         initial_positions = {
             "AGV 1": (7, 0),
             "AGV 2": (11, 2),
@@ -430,15 +440,10 @@ def initialize_agv():
         for key, pos in initial_positions.items():
             shared_data["positions"][key] = pos
             shared_data["logs"][key].append({"time": datetime.now().isoformat(), "position": pos})
-        
-        # 시뮬레이션 정지를 위한 추가 플래그 설정(시뮬레이션 프로세스들이 이를 확인하도록)
-        shared_data["stop_simulation"] = True
-        
-        # AGV 1의 경우 MQTT로도 STOP 명령 전송
-        if "AGV 1" in shared_data["positions"]:
-            send_stop_command_to_agv("AGV 1")
-        
-        # 시뮬레이션이 실행 중이었다면 초기화 후 더 이상 진행되지 않도록 표시
+    # 시뮬레이션 스레드가 실행 중이라면 종료될 때까지 기다립니다.
+    if simulation_thread is not None:
+        simulation_thread.join(timeout=2)
+        simulation_thread = None
         simulation_started = False
 
     return jsonify({"success": True, "message": "작업이 초기화되었습니다."})
@@ -505,10 +510,6 @@ def sse():
     })
     return response
 
-def start_background_threads():
-    sim_thread = threading.Thread(target=simulation_main, daemon=True)
-    sim_thread.start()
-
 if __name__ == '__main__':
-    start_background_threads()
+    # 시뮬레이션은 start 명령이 있을 때만 시작되도록 합니다.
     app.run(debug=False, use_reloader=False, host='0.0.0.0', port=2025)
