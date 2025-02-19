@@ -846,12 +846,23 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
             yield env.timeout(0.5)
         else:
             send_full_path_to_agv1(path)
+            prev_cell = current
             for pos in path[1:]:
+                # 예약 시도 (초기 세그먼트에도 예약 적용)
+                attempts = 0
+                start_wait = time.time()
+                while not reserve_cell(key, pos):
+                    yield env.timeout(random.uniform(BACKOFF_MIN, BACKOFF_MAX))
+                    attempts += 1
+                    if attempts >= MAX_RESERVE_ATTEMPTS or time.time()-start_wait > WAIT_TIMEOUT:
+                        break
                 yield env.timeout(MOVE_INTERVAL)
                 with data_lock:
                     shared_data["positions"][key] = pos
                     agv_positions[agv_id] = pos
                 logging.info("[SIM] %s 이동 완료: %s", key, pos)
+                release_cell(key, prev_cell)
+                prev_cell = pos
             with data_lock:
                 agv_positions[agv_id] = target
         return
@@ -875,8 +886,7 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
             obstacles = {pos for k, pos in shared_data["positions"].items() if k != key}
         path = calculate_full_path(grid, current, target, obstacles)
         if not path or len(path) < 2:
-            logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s, 장애물: %s)",
-                            key, current, target, obstacles)
+            logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s, 장애물: %s)", key, current, target, obstacles)
             yield env.timeout(0.5)
             recalc_attempts += 1
             if recalc_attempts >= max_recalc_attempts:
@@ -928,7 +938,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
     AGV 메인 로직
     AGV1:
-      - 초기 세그먼트를 하드코딩된 좌표(1초 간격)로 이동
+      - 초기 세그먼트를 하드코딩된 좌표(1초 간격, 셀 예약 적용)로 이동
       - 각 세그먼트 종료 시 마지막 좌표에 따라:
            (3,3) → 적재: 10초 정지 ("LOADING")
            (0,4) → 하역: 5초 정지 ("UNLOADING")
@@ -955,7 +965,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
 
     logging.debug("%s 시작 위치: %s", key, init_pos)
 
-    # AGV1 초기 세그먼트 실행
+    # AGV1 초기 세그먼트 실행 (셀 예약 적용)
     if agv_id == 0:
         segments = [
             [(7, 0), (6, 0), (5, 0), (4, 0)],
@@ -967,13 +977,24 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         for i, segment in enumerate(segments, start=1):
             send_full_path_to_agv1(segment)
             logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i, segment)
-            # 하드코딩된 좌표대로 1초 간격 이동
+            prev_cell = shared_data["positions"][key]
+            # 하드코딩된 좌표대로 1초 간격, 셀 예약 적용
             for pos in segment:
+                # 예약 시도
+                attempts = 0
+                start_wait = time.time()
+                while not reserve_cell(key, pos):
+                    yield env.timeout(random.uniform(BACKOFF_MIN, BACKOFF_MAX))
+                    attempts += 1
+                    if attempts >= MAX_RESERVE_ATTEMPTS or time.time()-start_wait > WAIT_TIMEOUT:
+                        break
                 yield env.timeout(MOVE_INTERVAL)
                 with data_lock:
                     shared_data["positions"][key] = pos
                     agv_positions[agv_id] = pos
                 logging.info("[SIM] %s 세그먼트 %d 이동 완료: %s", key, i, pos)
+                release_cell(key, prev_cell)
+                prev_cell = pos
             # 세그먼트 종료 후 정지 시간 결정
             if segment[-1] == (3, 3):
                 with data_lock:
@@ -987,15 +1008,13 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 yield env.timeout(5)
             else:
                 yield env.timeout(2)
-        # **중요:** 초기 세그먼트 사이클 종료 후, 현재 위치(하역 위치)를 명시적으로 업데이트
-        if agv_id == 0:
-            # 여기서 AGV1의 마지막 위치는 unloading 위치 (예, (0,4))
-            with data_lock:
-                agv_positions[agv_id] = shared_data["positions"][key]
-        # 이후 AGV1은 BFS 기반 사이클 시작 (현재 위치를 그대로 사용)
-        logging.info("[%s] %s 초기 세그먼트 사이클 완료, 현재 위치: %s", datetime.now().isoformat(), key, shared_data["positions"][key])
-
-        # (추가) 초기 하역 후, 5초 정지한 후 다음 사이클 진행
+        # 초기 세그먼트 사이클 종료 후, 현재 위치(하역 위치)를 유지
+        with data_lock:
+            # AGV1의 마지막 위치는 unloading 위치 (예, (0,4))
+            current = shared_data["positions"][key]
+            agv_positions[agv_id] = current
+        logging.info("[%s] %s 초기 세그먼트 사이클 완료, 현재 위치: %s", datetime.now().isoformat(), key, current)
+        # (추가) 초기 하역 후 5초 정지 후 다음 사이클 시작
         yield env.timeout(5)
         logging.info("[%s] %s 하역 후 정지 완료, 다음 사이클 시작", datetime.now().isoformat(), key)
 
@@ -1010,7 +1029,6 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                     available = set(shelf_coords)
                 loading_target = random.choice(list(available))
                 shared_data["used_shelf_targets"].add(loading_target)
-
         with data_lock:
             current = shared_data["positions"][key]
         while loading_target == current:
@@ -1040,7 +1058,6 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                     available = set(exit_coords)
                 exit_target = random.choice(list(available))
                 shared_data["used_exit_targets"].add(exit_target)
-
         with data_lock:
             current = shared_data["positions"][key]
         while exit_target == current:
