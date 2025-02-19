@@ -1123,15 +1123,20 @@ def simulation_main():
 
     env.process(monitor_stop())
 
-    # 기존의 AGV 프로세스 등록 등
     NUM_AGV = 4
+    agv_positions = {}
+    logs = {}
+    for i in range(NUM_AGV):
+        agv_positions[i] = None
+        logs[i] = []
     for i in range(NUM_AGV):
         if i == 0:
-            env.process(agv_process(env, i, ...))  # 필요한 인자 전달
+            env.process(agv_process(env, i, agv_positions, logs, AGV1_shelf_coords, AGV1_exit_coords))
         else:
-            env.process(agv_process(env, i, ...))
+            env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
     
     env.run(until=stop_event)
+
 
 if __name__ == "__main__":
     simulation_main()
