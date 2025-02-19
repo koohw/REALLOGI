@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { useSelector } from "react-redux";
+import React, { useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import {
   LineChart,
   Line,
@@ -12,95 +12,133 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import {
+  updateAGVData,
+  updateStatusCounts,
+  updateOrderTotal,
+  updateOrderSuccess,
+} from "../features/agvSlice";
+import { agvService } from "../api/agvService";
 
 const AnalyticsView = () => {
-  const efficiencyData = useSelector((state) => state.agv.agvData);
-  // orderTotal is used for the quantity chart (e.g., sum of order successes)
+  const dispatch = useDispatch();
+  // Redux에 저장된 데이터들을 가져옵니다.
+  const agvData = useSelector((state) => state.agv.agvData);
+  const lastEfficiency = useSelector((state) => state.agv.lastEfficiency);
   const orderSuccessTotal = useSelector((state) => state.agv.orderTotal);
-  // order_success contains each AGV's individual order success data
   const orderSuccessByAGV = useSelector((state) => state.agv.order_success);
+
+  // SSE 구독: 효율성 값이 변할 때만 updateAGVData 액션을 디스패치합니다.
+  useEffect(() => {
+    const eventSource = agvService.getAgvStream();
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      // 상태 카운트 업데이트
+      const statusCounts = {
+        operating: data.agv_number,
+        waiting: data.agvs.filter((agv) => agv.state === "STOPPED").length,
+        charging: data.agvs.filter((agv) => agv.state === "LOADING").length,
+        error: data.agvs.filter((agv) => agv.issue !== "").length,
+      };
+      dispatch(updateStatusCounts(statusCounts));
+
+      // 주문 총합 업데이트 및 AGV별 주문 성공 데이터 업데이트
+      const orderTotal = Object.values(data.order_success).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      dispatch(updateOrderTotal(orderTotal));
+      dispatch(updateOrderSuccess(data.order_success));
+
+      // 효율성 데이터 업데이트: 값이 변경되었을 때만 추가
+      const currentEfficiency = data.overall_efficiency;
+      if (lastEfficiency === null || currentEfficiency !== lastEfficiency) {
+        // overall_efficiency_history 배열의 첫 번째 타임스탬프 사용
+        const timestamp = new Date(data.overall_efficiency_history[0][0]);
+        const timeLabel = `${String(timestamp.getHours()).padStart(
+          2,
+          "0"
+        )}:${String(timestamp.getMinutes()).padStart(2, "0")}:${String(
+          timestamp.getSeconds()
+        ).padStart(2, "0")}`;
+
+        dispatch(updateAGVData({ timeLabel, efficiency: currentEfficiency }));
+      }
+    };
+
+    // eventSource.onerror = (error) => {
+    //   console.error("SSE Error:", error);
+    //   eventSource.close();
+    // };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [dispatch, lastEfficiency]);
+
+  // 여기서는 Redux에 저장된 전체 agvData를 그대로 사용합니다.
+  // (SSE에서 값이 갱신될 때만 데이터가 추가되므로, 그래프에는 변경된 값만 나타납니다.)
+  const efficiencyData = agvData;
+
+  // 물동량 차트 데이터 준비
   const totalCapacity = 3000;
-
-  // Optimize efficiency data to only include points where values change
-  const optimizedEfficiencyData = useMemo(() => {
-    if (!efficiencyData || efficiencyData.length === 0) return [];
-
-    return efficiencyData.reduce((acc, current, index) => {
-      if (index === 0) {
-        return [current];
-      }
-      const lastPoint = acc[acc.length - 1];
-      if (Math.abs(lastPoint.efficiency - current.efficiency) > 0.01) {
-        return [...acc, current];
-      }
-      if (
-        index === efficiencyData.length - 1 &&
-        lastPoint.time !== current.time
-      ) {
-        return [...acc, current];
-      }
-      return acc;
-    }, []);
-  }, [efficiencyData]);
-
-  // Data for the quantity bar chart
   const quantityData = [
-    {
-      name: "잔여",
-      remaining: totalCapacity - orderSuccessTotal,
-    },
-    {
-      name: "완료",
-      completed: orderSuccessTotal,
-    },
+    { name: "잔여", remaining: totalCapacity - orderSuccessTotal },
+    { name: "완료", completed: orderSuccessTotal },
   ];
 
-  // Prepare data for the AGV order success chart
-  const agvOrderSuccessData = useMemo(() => {
-    if (!orderSuccessByAGV) return [];
-    return Object.entries(orderSuccessByAGV).map(([agv, success]) => ({
-      agv,
-      success,
-    }));
-  }, [orderSuccessByAGV]);
+  // AGV 주문 성공 차트 데이터 준비
+  const agvOrderSuccessData = Object.entries(orderSuccessByAGV || {}).map(
+    ([agv, success]) => ({ agv, success })
+  );
 
   return (
     <div className="space-y-4 p-4 bg-gray-900 rounded-lg">
-      {/* Efficiency Graph */}
+      {/* 실시간 AGV 효율성 그래프 */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h3 className="text-white text-lg mb-4">실시간 AGV 효율성</h3>
         <div className="h-44">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={optimizedEfficiencyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <LineChart data={efficiencyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
               <XAxis
                 dataKey="time"
-                tick={{ fill: "#9CA3AF" }}
+                padding={{ left: 30, right: 30 }}
                 angle={-45}
                 textAnchor="end"
                 height={60}
-                interval={0}
+                tick={{ fill: "#fff" }}
               />
               <YAxis
                 domain={[0, 30]}
                 ticks={[0, 15, 30]}
-                tick={{ fill: "#9CA3AF" }}
+                tick={{ fill: "#fff" }}
+                label={{
+                  value: "효율성",
+                  angle: -90,
+                  position: "insideLeft",
+                  fill: "#fff",
+                  style: { textAnchor: "middle" },
+                }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1F2937",
+                  backgroundColor: "#11263f",
                   border: "none",
+                  color: "white",
                   borderRadius: "4px",
-                  color: "#fff",
                 }}
-                formatter={(value) => [`${value.toFixed(2)}sec`, "효율성"]}
+                labelStyle={{ color: "white" }}
+                formatter={(value) => `${value.toFixed(2)}sec`}
               />
               <Legend />
               <Line
                 type="monotone"
                 dataKey="efficiency"
-                name="효율성"
-                stroke="#60A5FA"
+                name="AGV 효율성"
+                stroke="#fff"
                 strokeWidth={2}
                 dot={true}
                 activeDot={{ r: 6 }}
@@ -110,7 +148,7 @@ const AnalyticsView = () => {
         </div>
       </div>
 
-      {/* Quantity Bar Chart */}
+      {/* 물동량 바 차트 */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h3 className="text-white text-lg mb-4">물동량 현황</h3>
         <div className="h-40">
@@ -156,7 +194,7 @@ const AnalyticsView = () => {
         </div>
       </div>
 
-      {/* AGV Order Success Bar Chart */}
+      {/* AGV 별 주문 성공 바 차트 */}
       <div className="bg-gray-800 rounded-lg p-4">
         <h3 className="text-white text-lg mb-4">AGV 별 주문 성공</h3>
         <div className="h-40">
