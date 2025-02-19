@@ -178,8 +178,9 @@ def create_app(port):
 
     app.register_blueprint(sim_bp)
     CORS(app)
+    socketio_path = f"{sim_prefix}/socket.io"
     socketio = SocketIO(app, cors_allowed_origins=[os.environ.get('FRONTEND_URL')],
-                        path=sim_prefix,
+                        path=socketio_path,
                         async_mode='eventlet',
                         logger=True,
                         engineio_logger=True,
