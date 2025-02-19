@@ -1,13 +1,18 @@
 import React, { useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { startOperation, initializeOperation } from "../store/operationSlice";
 import Sidebar from "../components/Sidebar";
 import AGVMap from "../components/AGVMap";
 import VideoPopup from "../components/VideoPopup";
 import { agvService } from "../api/agvService";
 
 function MonitorPage() {
+  const operationStarted = useSelector(
+    (state) => state.operation.operationStarted
+  );
+  const dispatch = useDispatch();
   const [showVideo, setShowVideo] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [operationStarted, setOperationStarted] = useState(false);
 
   const handleAgvStateChange = (agvData) => {
     const emergencyAgv = agvData.find(
@@ -24,7 +29,7 @@ function MonitorPage() {
       try {
         const response = await agvService.startAgv();
         console.log("작업 시작 응답:", response);
-        setOperationStarted(true);
+        dispatch(startOperation());
       } catch (error) {
         console.error("작업 시작 에러:", error);
       }
@@ -33,7 +38,7 @@ function MonitorPage() {
       try {
         const response = await agvService.initializeAgv();
         console.log("작업 초기화 응답:", response);
-        setOperationStarted(false);
+        dispatch(initializeOperation());
       } catch (error) {
         console.error("작업 초기화 에러:", error);
       }
