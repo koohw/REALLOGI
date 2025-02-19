@@ -177,7 +177,7 @@ def create_app(port):
         return f"Simulation running on port {port} at {sim_prefix}"
 
     app.register_blueprint(sim_bp)
-    CORS(app)
+    # CORS(app)
     socketio_path = f"{sim_prefix}/socket.io"
     socketio = SocketIO(app, cors_allowed_origins=[os.environ.get('FRONTEND_URL')],
                         path=socketio_path,
@@ -764,7 +764,7 @@ def run_server(port):
         pass
     app, socketio = create_app(port)
     # 포트 번호에 따라 URL 접두사가 결정됩니다.
-    sim_prefix = f"/sim{port - 5000}"
+    sim_prefix = f"/sim{port - 2024}"
     print(f"Starting server on port {port} with URL prefix: {sim_prefix}")
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
