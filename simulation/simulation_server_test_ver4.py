@@ -10,13 +10,12 @@ import heapq
 from simpy.rt import RealtimeEnvironment
 from simpy import Environment
 from collections import defaultdict
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Blueprint
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import logging
 import os
 logger = logging.getLogger(__name__)
-
 
 global_speed_factor = 1.0
 SIM_RUNNING = False
@@ -170,18 +169,23 @@ def find_nearest_shelf(pos, current_agv_id=None):
 
 def create_app(port):
     app = Flask(__name__)
-    CORS(app)
-    socketio = SocketIO(app, 
-    cors_allowed_origins=[os.environ.get('FRONTEND_URL')],
-    path='socket.io',
-    async_mode='eventlet',
-    logger=True,
-    engineio_logger=True,
-    ping_timeout=5000,
-    ping_interval=2500
-    )
+    sim_prefix = f"/sim{port - 2024}"
+    sim_bp = Blueprint('sim', __name__, url_prefix=sim_prefix)
 
-    
+    @sim_bp.route('/')
+    def index():
+        return f"Simulation running on port {port} at {sim_prefix}"
+
+    app.register_blueprint(sim_bp)
+    CORS(app)
+    socketio = SocketIO(app, cors_allowed_origins=[os.environ.get('FRONTEND_URL')],
+                        path=sim_prefix,
+                        async_mode='eventlet',
+                        logger=True,
+                        engineio_logger=True,
+                        ping_timeout=5000,
+                        ping_interval=2500)
+    bfs_path = a_star_path
 
     class AGV:
         def __init__(self, agv_id, start_pos):
@@ -674,36 +678,6 @@ def create_app(port):
         except Exception as e:
             emit('error', {'message': str(e)})
 
-    @app.route(f'/sim{(port-2026)+1}', methods=['GET'])
-    def simulation_stream():
-        def event_stream():
-            while True:
-                if not SIM_RUNNING:
-                    if current_positions:
-                        state = [{'agv_id': i, 'location_x': pos[0], 'location_y': pos[1]} 
-                                for i, pos in enumerate(current_positions)]
-                        yield f"data: {json.dumps({'agvs': state})}\n\n"
-                    eventlet.sleep(UPDATE_INTERVAL)
-                    continue
-                
-                state = []
-                for agv in SIM_AGVS:
-                    state.append({
-                        'agv_id': agv.id, 
-                        'location_x': agv.pos[0], 
-                        'location_y': agv.pos[1]
-                    })
-                yield f"data: {json.dumps({'agvs': state})}\n\n"
-                eventlet.sleep(UPDATE_INTERVAL)
-
-        response = Response(event_stream(), mimetype="text/event-stream")
-        response.headers.update({
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
-        })
-        return response
-    
     @app.route('/health')
     def health_check():
         return jsonify({"status": "ok"})
@@ -788,11 +762,13 @@ def run_server(port):
     except RuntimeError:
         pass
     app, socketio = create_app(port)
-    print(f"Starting server on port {port}")
+    # 포트 번호에 따라 URL 접두사가 결정됩니다.
+    sim_prefix = f"/sim{port - 5000}"
+    print(f"Starting server on port {port} with URL prefix: {sim_prefix}")
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
 def start_multi_server():
-    ports = [2026,2027,2028,2029]
+    ports = [2025, 2026, 2027, 2028]
     processes = []
     try:
         for port in ports:
