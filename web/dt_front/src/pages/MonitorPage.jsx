@@ -33,6 +33,7 @@ function MonitorPage() {
       try {
         const response = await agvService.initializeAgv();
         console.log("작업 초기화 응답:", response);
+        setOperationStarted(false);
       } catch (error) {
         console.error("작업 초기화 에러:", error);
       }
