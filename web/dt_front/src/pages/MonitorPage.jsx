@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { startOperation, initializeOperation } from "../store/operationSlice";
+import {
+  startOperation,
+  initializeOperation,
+} from "../features/operationSlice";
 import Sidebar from "../components/Sidebar";
 import AGVMap from "../components/AGVMap";
 import VideoPopup from "../components/VideoPopup";
