@@ -35,6 +35,7 @@ function MonitorPage() {
         dispatch(startOperation());
       } catch (error) {
         console.error("작업 시작 에러:", error);
+        dispatch(startOperation());
       }
     } else {
       // 작업 초기화
@@ -44,6 +45,7 @@ function MonitorPage() {
         dispatch(initializeOperation());
       } catch (error) {
         console.error("작업 초기화 에러:", error);
+        dispatch(initializeOperation());
       }
     }
   };
