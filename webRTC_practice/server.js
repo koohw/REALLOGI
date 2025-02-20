@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
                         }
                     };
 
-                    const ws = new WebSocket('ws://localhost:5000/ws');
+                    const ws = new WebSocket('ws://localhost:6033/ws');
                     
                     ws.onmessage = async (event) => {
                         const data = JSON.parse(event.data);
