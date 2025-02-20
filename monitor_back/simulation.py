@@ -421,7 +421,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 with data_lock:
                     shared_data["statuses"][key] = "LOADING"
                 logging.info("[%s] %s 도착 -> (3,3) (적재 완료, 10초 대기)", datetime.now().isoformat(), key)
-                yield env.timeout(8)
+                yield env.timeout(9.3)
                 logging.info("[%s] %s 적재 완료 후 추가 3초 대기 (방향 전환 시간)", datetime.now().isoformat(), key)
                 yield env.timeout(3)
                 with data_lock:
