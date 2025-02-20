@@ -8,6 +8,7 @@ const VideoPopup = ({ onClose }) => {
   const videoRef = useRef(null);
   const peerConnection = useRef(null);
   const wsRef = useRef(null);
+  const BASE_URL = process.env.REACT_APP_BASE_URL;
 
   useEffect(() => {
     const startWebRTC = async () => {
@@ -26,7 +27,7 @@ const VideoPopup = ({ onClose }) => {
           }
         };
 
-        wsRef.current = new WebSocket("ws://127.0.0.1:6033/ws");
+        wsRef.current = new WebSocket(BASE_URL + "/ws");
 
         wsRef.current.onopen = () => {
           setStreamStatus("서버에 연결됨");
