@@ -48,9 +48,9 @@ def compute_start_position(agv_key):
     elif index == 2:
         return (11, 2)
     elif index == 3:
-        return (11, 4)
-    elif index == 4:
         return (11, 6)
+    elif index == 4:
+        return (11, 10)
     else:
         return (11, (index - 1) * 2 % 15)
 
@@ -89,8 +89,8 @@ def initialize_agv():
         initial_positions = {
             "AGV 1": (7, 2),
             "AGV 2": (11, 2),
-            "AGV 3": (11, 4),
-            "AGV 4": (11, 6)
+            "AGV 3": (11, 6),
+            "AGV 4": (11, 10)
         }
         for key, pos in initial_positions.items():
             shared_data["positions"][key] = pos
