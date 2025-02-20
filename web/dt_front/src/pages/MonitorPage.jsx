@@ -69,13 +69,6 @@ function MonitorPage() {
             {operationStarted ? "작업 초기화" : "작업 시작"}
           </button>
 
-          <button
-            onClick={() => setShowVideo(!showVideo)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            {showVideo ? "비디오 닫기" : "비디오 열기"}
-          </button>
-
           {/* View Toggle Buttons */}
           <div className="inline-flex rounded-lg bg-gray-800 p-1">
             <button
