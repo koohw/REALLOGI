@@ -70,7 +70,7 @@ MAP = [
 ROWS = len(MAP)
 COLS = len(MAP[0])
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
-shelf_coords = [(3, 3), (5, 4), (3, 12), (9, 12), (8, 6)]
+shelf_coords = [(5, 4), (3, 12), (9, 12), (8, 6)]
 
 # AGV1 전용 맵 (좌표 (0,0)부터 (7,8) 영역)
 AGV1_MAP = [
@@ -383,7 +383,7 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     key = f"AGV {agv_id+1}"
     if agv_id == 0:
-        init_pos = (7, 0)  # 초기 위치는 여기서 설정되지만, 초기화 시 Flask에서는 (7,2)로 재설정합니다.
+        init_pos = (7, 2)  # 초기 위치는 여기서 설정되지만, 초기화 시 Flask에서는 (7,2)로 재설정합니다.
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
