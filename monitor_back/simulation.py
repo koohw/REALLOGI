@@ -636,7 +636,7 @@ MAP = [
 ROWS = len(MAP)
 COLS = len(MAP[0])
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
-shelf_coords = [(3,3), (5,4), (3,12), (9,12), (8,6)]
+shelf_coords = [(5,4), (3,12), (9,12), (8,6)]
 
 # AGV1 전용 맵 (좌표 (0,0)부터 (7,8) 영역)
 AGV1_MAP = [
