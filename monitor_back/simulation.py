@@ -72,7 +72,7 @@ MAP = [
 ROWS = len(MAP)
 COLS = len(MAP[0])
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
-shelf_coords = [(3,3), (5,4), (3,12), (9,12), (8,6)]
+shelf_coords = [(5,4), (3,12), (9,12), (8,6)]
 
 # AGV1 전용 맵 (좌표 (0,0)부터 (7,8) 영역)
 AGV1_MAP = [
@@ -410,7 +410,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
     key = f"AGV {agv_id+1}"
     if agv_id == 0:
-        init_pos = (7, 0)
+        init_pos = (7, 2)
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
@@ -427,26 +427,26 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     # AGV1: 초기 하드코딩 경로 실행 (세그먼트별)
     if agv_id == 0:
         segments = [
-            [(7, 0), (6, 0), (5, 0), (4, 0)],
-            [(4, 1), (4, 2), (4, 3)],
+            [(7, 2), (6, 2), (5, 2), (4, 2)],
+            [(4, 3)],
             [(3, 3)],
-            [(3, 3), (3, 4)],
+            [(3, 4)],
             [(2, 4), (1, 4), (0, 4)]
         ]
         for i, segment in enumerate(segments):
             send_full_path_to_agv1(segment)
             logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
-            target_coord = segment[-1]
-            while True:
-                yield env.timeout(MOVE_INTERVAL)
+            # MQTT ACK 여부와 상관없이 세그먼트 경로대로 이동 (첫 좌표는 이미 초기 위치)
+            for coord in segment[1:]:
+                yield env.timeout(3.3)
                 with data_lock:
-                    current = shared_data["positions"][key]
-                if current == target_coord:
-                    logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, current)
-                    break
+                    shared_data["positions"][key] = coord
+                logging.info("[SIM] %s 진행: %s", key, coord)
+            logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, segment[-1])
             yield env.timeout(1)
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
+        # 이후 exit_target 이동 및 이후 로직은 기존과 동일
         exit_target = random.choice(exit_coords)
         with data_lock:
             current = shared_data["positions"][key]
@@ -462,6 +462,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         yield env.timeout(5)
         logging.info("[%s] %s 0,4에서 5초간 정지", datetime.now().isoformat(), key)
         yield env.timeout(5)
+
 
     while True:
         if agv_id == 0:

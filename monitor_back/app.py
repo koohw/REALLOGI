@@ -289,7 +289,7 @@ def compute_start_position(agv_key):
     except Exception:
         index = 1
     if index == 1:
-        return (7, 0)
+        return (7, 2)
     elif index == 2:
         return (11, 2)
     elif index == 3:
