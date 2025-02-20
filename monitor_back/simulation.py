@@ -427,7 +427,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 with data_lock:
                     shared_data["statuses"][key] = "EMERGENCY(STOPPED)"
                 logging.info("[SIM] %s 장애물 감지: (3,3) -> (3,4) 사이에서 5초 정지, 상태 EMERGENCY(STOPPED)", key)
-                yield env.timeout(5)
+                yield env.timeout(6.5)
                 with data_lock:
                     shared_data["statuses"][key] = "RUNNING"
                 logging.info("[SIM] %s 장애물 해제: 다시 작동, 상태 RUNNING", key)
