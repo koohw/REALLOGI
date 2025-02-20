@@ -586,10 +586,9 @@ def simulation_main():
             env.process(agv_process(env, i, agv_positions, logs, AGV1_shelf_coords, AGV1_exit_coords))
         else:
             env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
-    # 대신 무한 실행하지 않고, 1초씩 실행하며 stop_simulation 플래그를 확인
-    while not shared_data.get("stop_simulation", False):
-        env.run(until=1)
-    logging.info("시뮬레이션이 종료되었습니다.")
+    # 여기서는 env.run()으로 무한 실행합니다.
+    env.run(until=float('inf'))
+
 
 if __name__ == "__main__":
     simulation_main()
