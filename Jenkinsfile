@@ -49,7 +49,7 @@ pipeline {
 
         stage('Build WebRTC Signaling Server') {
             steps {
-                dir('signaling-server') {  // WebRTC 서버 코드가 있는 디렉토리
+                dir('webRTC') {  // WebRTC 서버 코드가 있는 디렉토리
                     sh '''
                         docker build -t webrtc-signaling:latest .
                     '''
