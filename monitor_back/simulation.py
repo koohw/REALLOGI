@@ -410,14 +410,32 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             send_full_path_to_agv1(segment)
             logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
             for coord in segment[1:]:
-                yield env.timeout(MOVE_INTERVAL)
+                yield env.timeout(3.3)
                 with data_lock:
                     shared_data["positions"][key] = coord
                 logging.info("[SIM] %s 진행: %s", key, coord)
             logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, segment[-1])
             yield env.timeout(1)
+        
+        # 적재 구간으로 이동
+        loading_target = random.choice(shelf_coords)
         with data_lock:
+            current = shared_data["positions"][key]
+        while loading_target == current:
+            loading_target = random.choice(shelf_coords)
+        with data_lock:
+            shared_data["target"][key] = loading_target
+            shared_data["agv1_expected_target"] = loading_target
             shared_data["statuses"][key] = "RUNNING"
+        yield from move_to(env, agv_id, agv_positions, logs, loading_target, grid)
+        
+        # 도착 후 상태를 LOADING으로 변경하고 10초 대기 (적재 작업)
+        with data_lock:
+            shared_data["statuses"][key] = "LOADING"
+        logging.info("[%s] %s 도착 -> %s (적재 완료, 10초 대기)", datetime.now().isoformat(), key, loading_target)
+        yield env.timeout(10)
+        
+        # 출구 구간으로 이동
         exit_target = random.choice(exit_coords)
         with data_lock:
             current = shared_data["positions"][key]
@@ -426,6 +444,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         with data_lock:
             shared_data["target"][key] = exit_target
             shared_data["agv1_expected_target"] = exit_target
+            shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target, grid)
         with data_lock:
             shared_data["statuses"][key] = "UNLOADING"
@@ -433,6 +452,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         yield env.timeout(5)
         logging.info("[%s] %s 0,4에서 5초간 정지", datetime.now().isoformat(), key)
         yield env.timeout(5)
+
 
     while True:
         with data_lock:
