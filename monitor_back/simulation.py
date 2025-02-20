@@ -72,7 +72,7 @@ MAP = [
 ROWS = len(MAP)
 COLS = len(MAP[0])
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
-shelf_coords = [(3,3), (5,4), (3,12), (9,12), (8,6)]
+shelf_coords = [(5,4), (3,12), (9,12), (8,6)]
 
 # AGV1 전용 맵 (좌표 (0,0)부터 (7,8) 영역)
 AGV1_MAP = [
@@ -85,9 +85,9 @@ AGV1_MAP = [
     [0, 0, 0, 1, 1, 0, 1, 1, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0]
 ]
-AGV1_ROWS = len(AGV1_MAP)
-AGV1_COLS = len(AGV1_MAP[0])
-AGV1_exit_coords = [(0, c) for c in range(AGV1_COLS) if AGV1_MAP[0][c] == 2]
+AGV1_rows = len(AGV1_MAP)
+AGV1_cols = len(AGV1_MAP[0])
+AGV1_exit_coords = [(0, c) for c in range(AGV1_cols) if AGV1_MAP[0][c] == 2]
 AGV1_shelf_coords = [(3,3), (5,4), (8,6)]  # (8,6)은 범위 확인 필요
 
 ##############################################################################
@@ -138,6 +138,8 @@ shared_data = {
     },
     "efficiency": {"AGV 1": 0, "AGV 2": 0, "AGV 3": 0, "AGV 4": 0},
     "overall_efficiency_history": [],
+    # 작업 초기화 시 AGV들이 움직이지 않도록 하기 위한 플래그
+    "stop_simulation": False,
     # 사용 중인 loading/unloading 목표 추적 (AGV1 제외)
     "used_shelf_targets": set(),
     "used_exit_targets": set()
@@ -275,9 +277,9 @@ def check_deadlock(agv_positions, shared_data):
 ##############################################################################
 # 9) AGV 프로세스 및 이동 함수 (충돌 회피 및 장애물 고려, 셀 예약 적용)
 ##############################################################################
-MOVE_INTERVAL = 1  # 1초마다 한 칸 이동
+MOVE_INTERVAL = 1   # 다른 AGV는 1초마다 한 칸 이동
 SIMULATE_MQTT = True  # AGV1은 MQTT로 전체 경로 명령 전송
-WAIT_TIMEOUT = 3   # 셀 예약 대기 타임아웃 (초)
+WAIT_TIMEOUT = 3    # 셀 예약 대기 타임아웃 (초)
 BACKOFF_MIN = 0.2
 BACKOFF_MAX = 0.8
 MAX_RESERVE_ATTEMPTS = 1  # 예약 시도 횟수를 1로 설정
@@ -288,8 +290,12 @@ def random_start_position(agv_id):
 
 def move_to(env, agv_id, agv_positions, logs, target, grid):
     key = f"AGV {agv_id+1}"
-    # AGV1: MQTT 로직 사용 (단, 장애물 처리 시 현재 위치만 반영)
-    if agv_id == 0 and SIMULATE_MQTT:
+    # 작업 중지 플래그 확인 (필요시 대기)
+    while shared_data.get("stop_simulation", False):
+        yield env.timeout(0.5)
+
+    # AGV1: MQTT 통신 여부와 관계없이 항상 자동 진행
+    if agv_id == 0:
         with data_lock:
             current = agv_positions[agv_id]
         if current == target:
@@ -300,28 +306,24 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
         path = calculate_full_path(grid, current, target, obstacles)
         if not path or len(path) < 2:
             logging.warning("%s: 경로 없음, 재계산 시도 (현재: %s, 목표: %s)", key, current, target)
-            yield env.timeout(0.5)
+            yield env.timeout(3.3)
         else:
+            # 항상 경로를 전송(세그먼트 단위로 진행)
             send_full_path_to_agv1(path)
-            while True:
-                yield env.timeout(0.5)
+            # 자동으로 각 좌표로 이동 (MQTT ACK에 의존하지 않음)
+            for i in range(1, len(path)):
+                yield env.timeout(3.3)  # 각 격자 이동에 3.3초 소요
                 with data_lock:
-                    current = shared_data["positions"][key]
-                    agv_positions[agv_id] = current
-                try:
-                    idx = path.index(current)
-                    if idx < len(path) - 1:
-                        with data_lock:
-                            shared_data["directions"][key] = compute_direction(current, path[idx+1])
-                except ValueError:
-                    pass
-                if current == target:
-                    break
+                    shared_data["positions"][key] = path[i]
+                    agv_positions[agv_id] = path[i]
+                    if i < len(path)-1:
+                        shared_data["directions"][key] = compute_direction(path[i], path[i+1])
+                logging.info("[SIM] %s 진행: %s", key, path[i])
             with data_lock:
                 agv_positions[agv_id] = target
         return
 
-    # AGV1(후반부) 및 다른 AGV: 한 칸씩 이동하면서 경로 재계산 (셀 예약 적용)
+    # 나머지 AGV (또는 AGV1의 후반 작업)이면 기존 로직 사용
     with data_lock:
         current = agv_positions[agv_id]
     prev_cell = current  
@@ -330,6 +332,10 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
     recalc_attempts = 0
 
     while True:
+        if shared_data.get("stop_simulation", False):
+            yield env.timeout(0.5)
+            continue
+
         with data_lock:
             if shared_data["statuses"][key] == "STOP":
                 logging.info("%s: 정지 상태 감지, 이동 중단", key)
@@ -352,7 +358,6 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
 
         logging.debug("%s 전체 경로: %s", key, path)
         moved = False
-        # 각 셀로 이동 전에 예약 시도 (예약 대기 타임아웃 적용)
         for i, next_pos in enumerate(path[1:], start=1):
             with data_lock:
                 if shared_data["statuses"][key] == "STOP":
@@ -400,24 +405,27 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
                 logging.error("%s: 최대 재계산 시도 횟수 초과. 이동 중단.", key)
                 return
 
+
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
     각 AGV별 메인 로직.
-    AGV1 (agv_id==0)는 초기 경로를 5개의 세그먼트로 나누어,
-    하드웨어에서 QR을 인식해 위치 좌표가 수신되면 다음 세그먼트를 전송합니다.
-    이후 loading/unloading 작업은 기존 BFS 방식으로 진행합니다.
+    AGV1 (agv_id==0)는 초기 경로를 5개의 세그먼트로 나누어 진행하며,
     나머지 AGV는 전체 MAP을 사용합니다.
+    작업 초기화(stop_simulation=True)인 경우에는 작업 시작 전까지 대기합니다.
     """
     key = f"AGV {agv_id+1}"
+    # 작업 초기화 상태면 대기 (즉, start 명령 전까지 움직이지 않음)
+    while shared_data.get("stop_simulation", False):
+        yield env.timeout(0.5)
+
     if agv_id == 0:
         init_pos = (7, 0)
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
         grid = MAP
-    agv_positions[agv_id] = init_pos
-    logs[agv_id].append((datetime.now().isoformat(), init_pos))
     with data_lock:
+        agv_positions[agv_id] = init_pos
         shared_data["positions"][key] = init_pos
         shared_data["logs"][key].append({"time": datetime.now().isoformat(), "position": init_pos})
         shared_data["statuses"][key] = "RUNNING"
@@ -425,6 +433,28 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     logging.debug("%s 시작 위치: %s", key, init_pos)
 
     # AGV1: 초기 하드코딩 경로 실행 (세그먼트별)
+    # if agv_id == 0:
+    #     segments = [
+    #         [(7, 0), (6, 0), (5, 0), (4, 0)],
+    #         [(4, 1), (4, 2), (4, 3)],
+    #         [(3, 3)],
+    #         [(3, 3), (3, 4)],
+    #         [(2, 4), (1, 4), (0, 4)]
+    #     ]
+    #     for i, segment in enumerate(segments):
+    #         # 작업 중지 플래그가 켜져 있으면 대기
+    #         while shared_data.get("stop_simulation", False):
+    #             yield env.timeout(0.5)
+    #         send_full_path_to_agv1(segment)
+    #         logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
+    #         target_coord = segment[-1]
+    #         for coord in segment[1:]:
+    #             yield env.timeout(3.3)  # 각 격자 이동 시간
+    #             with data_lock:
+    #                 shared_data["positions"][key] = coord
+    #             logging.info("[SIM] %s 진행: %s", key, coord)
+    #         logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, target_coord)
+    #         yield env.timeout(5)  # 세그먼트 전환 시 5초 대기
     if agv_id == 0:
         segments = [
             [(7, 0), (6, 0), (5, 0), (4, 0)],
@@ -432,19 +462,20 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             [(3, 3)],
             [(3, 3), (3, 4)],
             [(2, 4), (1, 4), (0, 4)]
-        ]
-        for i, segment in enumerate(segments):
-            send_full_path_to_agv1(segment)
-            logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
-            target_coord = segment[-1]
-            while True:
-                yield env.timeout(MOVE_INTERVAL)
-                with data_lock:
-                    current = shared_data["positions"][key]
-                if current == target_coord:
-                    logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, current)
-                    break
-            yield env.timeout(1)
+    ]
+    for i, segment in enumerate(segments):
+        send_full_path_to_agv1(segment)
+        logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
+        target_coord = segment[-1]
+        for coord in segment[1:]:
+            yield env.timeout(3.3)
+            with data_lock:
+                shared_data["positions"][key] = coord
+            logging.info("[SIM] %s 진행: %s", key, coord)
+        logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, target_coord)
+        yield env.timeout(5)
+
+            
         with data_lock:
             shared_data["statuses"][key] = "RUNNING"
         exit_target = random.choice(exit_coords)
@@ -463,7 +494,11 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         logging.info("[%s] %s 0,4에서 5초간 정지", datetime.now().isoformat(), key)
         yield env.timeout(5)
 
+    # 나머지 AGV 및 AGV1의 로딩/하역 사이클
     while True:
+        # 작업 정지 플래그가 켜지면 대기
+        while shared_data.get("stop_simulation", False):
+            yield env.timeout(0.5)
         if agv_id == 0:
             loading_target = random.choice(shelf_coords)
         else:
@@ -551,7 +586,10 @@ def simulation_main():
             env.process(agv_process(env, i, agv_positions, logs, AGV1_shelf_coords, AGV1_exit_coords))
         else:
             env.process(agv_process(env, i, agv_positions, logs, shelf_coords, exit_coords))
-    env.run(until=float('inf'))
+    # 대신 무한 실행하지 않고, 1초씩 실행하며 stop_simulation 플래그를 확인
+    while not shared_data.get("stop_simulation", False):
+        env.run(until=1)
+    logging.info("시뮬레이션이 종료되었습니다.")
 
 if __name__ == "__main__":
     simulation_main()

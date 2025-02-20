@@ -89,7 +89,7 @@ const AGVMonitoring = ({ mapData = DEFAULT_MAP, serverUrl }) => {
     const initializeSocket = () => {
       const serverAddress = new URL(serverUrl);
       const socket = io(serverAddress.origin, {
-        path: "/socket.io",
+        path: serverAddress.pathname,
         transports: ["websocket"],
         reconnection: true,
         reconnectionAttempts: 5,

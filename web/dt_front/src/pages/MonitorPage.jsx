@@ -1,10 +1,19 @@
 import React, { useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import {
+  startOperation,
+  initializeOperation,
+} from "../features/operationSlice";
 import Sidebar from "../components/Sidebar";
 import AGVMap from "../components/AGVMap";
 import VideoPopup from "../components/VideoPopup";
 import { agvService } from "../api/agvService";
 
 function MonitorPage() {
+  const operationStarted = useSelector(
+    (state) => state.operation.operationStarted
+  );
+  const dispatch = useDispatch();
   const [showVideo, setShowVideo] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
@@ -17,12 +26,27 @@ function MonitorPage() {
     }
   };
 
-  const handleStartOperation = async () => {
-    try {
-      const response = await agvService.startAgv();
-      console.log("작업 시작 응답:", response);
-    } catch (error) {
-      console.error("작업 시작 에러:", error);
+  const handleOperationClick = async () => {
+    if (!operationStarted) {
+      // 작업 시작
+      try {
+        const response = await agvService.startAgv();
+        console.log("작업 시작 응답:", response);
+        dispatch(startOperation());
+      } catch (error) {
+        console.error("작업 시작 에러:", error);
+        dispatch(startOperation());
+      }
+    } else {
+      // 작업 초기화
+      try {
+        const response = await agvService.initializeAgv();
+        console.log("작업 초기화 응답:", response);
+        dispatch(initializeOperation());
+      } catch (error) {
+        console.error("작업 초기화 에러:", error);
+        dispatch(initializeOperation());
+      }
     }
   };
 
@@ -37,12 +61,12 @@ function MonitorPage() {
       <div className="flex-1 flex flex-col">
         {/* Header with controls */}
         <div className="p-4 border-b border-gray-700 bg-[#11263f] flex justify-between items-center">
-          {/* 작업 시작 버튼 (비디오 토글 버튼 대신) */}
+          {/* 작업 시작 / 작업 초기화 버튼 */}
           <button
-            onClick={handleStartOperation}
+            onClick={handleOperationClick}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
-            작업 시작
+            {operationStarted ? "작업 초기화" : "작업 시작"}
           </button>
 
           {/* View Toggle Buttons */}
