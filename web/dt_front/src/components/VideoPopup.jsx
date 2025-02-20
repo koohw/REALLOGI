@@ -8,7 +8,7 @@ const VideoPopup = ({ onClose }) => {
   const videoRef = useRef(null);
   const peerConnection = useRef(null);
   const wsRef = useRef(null);
-  const BASE_URL = process.env.REACT_APP_BASE_URL;
+  const BASE_URL = process.env.REACT_APP_API_URL;
 
   useEffect(() => {
     const startWebRTC = async () => {
