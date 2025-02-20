@@ -365,7 +365,7 @@ def initialize_agv():
         shared_data["stop_simulation"] = True
         # 각 AGV의 초기 위치 재설정 (AGV 1: (7,0), AGV 2: (11,2), AGV 3: (11,4), AGV 4: (11,6))
         initial_positions = {
-            "AGV 1": (7, 0),
+            "AGV 1": (7, 2),
             "AGV 2": (11, 2),
             "AGV 3": (11, 4),
             "AGV 4": (11, 6)
