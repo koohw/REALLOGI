@@ -438,7 +438,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             logging.info("[SIM] %s 세그먼트 %d 전송: %s", key, i+1, segment)
             # MQTT ACK 여부와 상관없이 세그먼트 경로대로 이동 (첫 좌표는 이미 초기 위치)
             for coord in segment[1:]:
-                yield env.timeout(MOVE_INTERVAL)
+                yield env.timeout(3.3)
                 with data_lock:
                     shared_data["positions"][key] = coord
                 logging.info("[SIM] %s 진행: %s", key, coord)
