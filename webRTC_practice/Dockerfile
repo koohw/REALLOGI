@@ -1,33 +1,23 @@
-# 기본 Python 이미지 사용
-FROM python:3.9-slim
+# Node.js LTS 버전 사용
+FROM node:lts-slim
 
 # 작업 디렉토리 설정
-WORKDIR /app
+WORKDIR /usr/src/app
 
-# 시스템 의존성 설치
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3-dev \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# 앱 종속성 설치를 위한 package.json 파일 복사
+COPY package*.json ./
 
-# Python 패키지 설치를 위한 requirements.txt 복사 및 설치
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 프로덕션 종속성만 설치
+RUN npm ci --only=production
 
-# 애플리케이션 코드 복사
+# 소스 코드 복사
 COPY . .
 
-# 헬스체크 설정
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+# 환경 변수 설정
+ENV NODE_ENV=production
 
-# 실행 명령
-CMD ["python", "webcam_webrtc.py"]
+# 포트 설정
+EXPOSE 6033
+
+# 앱 실행
+CMD ["node", "server.js"]
