@@ -383,7 +383,7 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     key = f"AGV {agv_id+1}"
     if agv_id == 0:
-        init_pos = (7, 0)
+        init_pos = (7, 0)  # 초기 위치는 여기서 설정되지만, 초기화 시 Flask에서는 (7,2)로 재설정합니다.
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
@@ -416,6 +416,15 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 logging.info("[SIM] %s 진행: %s", key, coord)
             logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, segment[-1])
             yield env.timeout(1)
+            # 장애물 감지: 세그먼트 3 ((3,3) 도착) 후, 다음 세그먼트가 [(3,4)]이면 긴급 정지 처리
+            if i == 2 and segments[i+1] == [(3, 4)]:
+                with data_lock:
+                    shared_data["statuses"][key] = "EMERGENCY(STOPPED)"
+                logging.info("[SIM] %s 장애물 감지: (3,3) -> (3,4) 사이에서 5초 정지, 상태 EMERGENCY(STOPPED)", key)
+                yield env.timeout(5)
+                with data_lock:
+                    shared_data["statuses"][key] = "RUNNING"
+                logging.info("[SIM] %s 장애물 해제: 다시 작동, 상태 RUNNING", key)
         
         # 적재 구간으로 이동
         loading_target = random.choice(shelf_coords)
@@ -429,11 +438,13 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, loading_target, grid)
         
-        # 도착 후 상태를 LOADING으로 변경하고 10초 대기 (적재 작업)
+        # 도착 후 적재: 상태를 LOADING으로 변경하고 10초 대기한 후 추가로 3초 대기 (방향 전환 시간 고려)
         with data_lock:
             shared_data["statuses"][key] = "LOADING"
         logging.info("[%s] %s 도착 -> %s (적재 완료, 10초 대기)", datetime.now().isoformat(), key, loading_target)
         yield env.timeout(10)
+        logging.info("[%s] %s 적재 완료 후 추가 3초 대기 (방향 전환 시간)", datetime.now().isoformat(), key)
+        yield env.timeout(3)
         
         # 출구 구간으로 이동
         exit_target = random.choice(exit_coords)
@@ -452,7 +463,6 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         yield env.timeout(5)
         logging.info("[%s] %s 0,4에서 5초간 정지", datetime.now().isoformat(), key)
         yield env.timeout(5)
-
 
     while True:
         with data_lock:
