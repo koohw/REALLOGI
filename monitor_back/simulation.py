@@ -72,7 +72,7 @@ MAP = [
 ROWS = len(MAP)
 COLS = len(MAP[0])
 exit_coords = [(0, c) for c in range(COLS) if MAP[0][c] == 2]
-shelf_coords = [(3,3), (5,4), (3,12), (9,12), (8,6)]
+shelf_coords = [(5,4), (3,12), (9,12), (8,6)]
 
 # AGV1 전용 맵 (좌표 (0,0)부터 (7,8) 영역)
 AGV1_MAP = [
@@ -410,7 +410,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     """
     key = f"AGV {agv_id+1}"
     if agv_id == 0:
-        init_pos = (7, 0)
+        init_pos = (7, 2)
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
