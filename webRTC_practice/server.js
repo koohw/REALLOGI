@@ -121,7 +121,7 @@ wss.on("connection", (ws, req) => {
 });
 
 const PORT = 6033;
-const HOST = "127.0.0.1";
+const HOST = "0.0.0.0";
 
 console.log(`서버 시작 중... (${HOST}:${PORT})`);
 server.listen(PORT, HOST, () => {
