@@ -463,9 +463,11 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             shared_data["agv1_expected_target"] = exit_target
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, exit_target, grid)
-        with data_lock:
-            shared_data["statuses"][key] = "UNLOADING"
-        logging.info("[%s] %s 도착 -> %s (하역 완료, 5초 대기)", datetime.now().isoformat(), key, exit_target)
+        # 출구 도착 후, 만약 exit_target이 (0,4)라면 unloading 상태로 설정
+        if exit_target == (0, 4):
+            with data_lock:
+                shared_data["statuses"][key] = "UNLOADING"
+            logging.info("[%s] %s 도착 -> %s (하역 완료, 5초 대기)", datetime.now().isoformat(), key, exit_target)
         yield env.timeout(5)
         logging.info("[%s] %s 0,4에서 5초간 정지", datetime.now().isoformat(), key)
         yield env.timeout(5)
@@ -475,14 +477,12 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             if shared_data.get("stop_simulation", False):
                 logging.info("%s: stop_simulation 플래그 감지. 프로세스 종료.", key)
                 return
-        if agv_id == 0:
-            loading_target = random.choice(shelf_coords)
-        else:
-            with data_lock:
-                available = set(shelf_coords) - shared_data["used_shelf_targets"]
-                if not available:
-                    available = set(shelf_coords)
-                loading_target = random.choice(list(available))
+        with data_lock:
+            available = set(shelf_coords) - shared_data["used_shelf_targets"]
+            if not available:
+                available = set(shelf_coords)
+            loading_target = random.choice(list(available))
+            if agv_id != 0:
                 shared_data["used_shelf_targets"].add(loading_target)
         with data_lock:
             current = shared_data["positions"][key]
@@ -503,14 +503,12 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
         if agv_id != 0:
             with data_lock:
                 shared_data["used_shelf_targets"].discard(loading_target)
-        if agv_id == 0:
-            exit_target = random.choice(exit_coords)
-        else:
-            with data_lock:
-                available = set(exit_coords) - shared_data["used_exit_targets"]
-                if not available:
-                    available = set(exit_coords)
-                exit_target = random.choice(list(available))
+        with data_lock:
+            available = set(exit_coords) - shared_data["used_exit_targets"] if agv_id != 0 else set(exit_coords)
+            if not available:
+                available = set(exit_coords)
+            exit_target = random.choice(list(available))
+            if agv_id != 0:
                 shared_data["used_exit_targets"].add(exit_target)
         with data_lock:
             current = shared_data["positions"][key]
