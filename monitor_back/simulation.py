@@ -383,7 +383,7 @@ def move_to(env, agv_id, agv_positions, logs, target, grid):
 def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
     key = f"AGV {agv_id+1}"
     if agv_id == 0:
-        init_pos = (7, 2)  # 초기 위치는 여기서 설정되지만, 초기화 시 Flask에서는 (7,2)로 재설정합니다.
+        init_pos = (7, 2)  # 초기 위치는 (7,2)로 설정
         grid = AGV1_MAP
     else:
         init_pos = random_start_position(agv_id)
@@ -416,8 +416,14 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                 logging.info("[SIM] %s 진행: %s", key, coord)
             logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, segment[-1])
             yield env.timeout(1)
-            # 장애물 감지: 세그먼트 3 ((3,3) 도착) 후, 다음 세그먼트가 [(3,4)]이면 긴급 정지 처리
-            if i == 2 and segments[i+1] == [(3, 4)]:
+            # 세그먼트 3 ((3,3)에 도착한 후)에 대해 적재 작업 및 긴급 정지 처리
+            if i == 2:
+                with data_lock:
+                    shared_data["statuses"][key] = "LOADING"
+                logging.info("[%s] %s 도착 -> (3,3) (적재 완료, 10초 대기)", datetime.now().isoformat(), key)
+                yield env.timeout(10)
+                logging.info("[%s] %s 적재 완료 후 추가 3초 대기 (방향 전환 시간)", datetime.now().isoformat(), key)
+                yield env.timeout(3)
                 with data_lock:
                     shared_data["statuses"][key] = "EMERGENCY(STOPPED)"
                 logging.info("[SIM] %s 장애물 감지: (3,3) -> (3,4) 사이에서 5초 정지, 상태 EMERGENCY(STOPPED)", key)
@@ -438,7 +444,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
             shared_data["statuses"][key] = "RUNNING"
         yield from move_to(env, agv_id, agv_positions, logs, loading_target, grid)
         
-        # 도착 후 적재: 상태를 LOADING으로 변경하고 10초 대기한 후 추가로 3초 대기 (방향 전환 시간 고려)
+        # 도착 후 적재: 상태를 LOADING으로 변경하고 10초 대기한 후 추가로 3초 대기
         with data_lock:
             shared_data["statuses"][key] = "LOADING"
         logging.info("[%s] %s 도착 -> %s (적재 완료, 10초 대기)", datetime.now().isoformat(), key, loading_target)
