@@ -415,7 +415,7 @@ def agv_process(env, agv_id, agv_positions, logs, shelf_coords, exit_coords):
                     shared_data["positions"][key] = coord
                 logging.info("[SIM] %s 진행: %s", key, coord)
             logging.info("[SIM] %s 세그먼트 %d 완료, 도착: %s", key, i+1, segment[-1])
-            yield env.timeout(5)
+            yield env.timeout(5.4)
             # 세그먼트 3 ((3,3)에 도착한 후)에 대해 적재 작업 및 긴급 정지 처리
             if i == 2:
                 with data_lock:
