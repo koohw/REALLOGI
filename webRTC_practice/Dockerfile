@@ -1,5 +1,5 @@
 # Node.js LTS 버전 사용
-FROM node:lts-slim
+FROM node:20-alpine AS builder
 
 # 작업 디렉토리 설정
 WORKDIR /usr/src/app
@@ -12,9 +12,6 @@ RUN npm ci --only=production
 
 # 소스 코드 복사
 COPY . .
-
-# 환경 변수 설정
-ENV NODE_ENV=production
 
 # 포트 설정
 EXPOSE 6033
