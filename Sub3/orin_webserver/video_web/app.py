@@ -4,7 +4,7 @@ import cv2
 app = Flask(__name__)
 
 def gen_frames():
-    camera = cv2.VideoCapture(0)  # 0번 카메라 (Jetson Orin의 기본 카메라)
+    camera = cv2.VideoCapture(2)  # 0번 카메라 (Jetson Orin의 기본 카메라)
    
     # CUDA 사용 가능 여부 확인
     use_cuda = cv2.cuda.getCudaEnabledDeviceCount() > 0
