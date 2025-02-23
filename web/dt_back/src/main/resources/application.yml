@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: dt_back
+  datasource:
+    url: ${AWSDB_URL}
+    username: ${AWSDB_USERNAME}
+    password: ${AWSDB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    show-sql: true
+
+  allowed:
+    origin: ${AllowedOrigin:localhost:8080}
+
+logging:
+  level:
+    org:
+      web:
+        DEBUG
+      hibernate:
+        SQL: debug
+

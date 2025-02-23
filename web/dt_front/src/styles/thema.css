@@ -1,0 +1,53 @@
+/* styles/theme.css */
+:root {
+  /* 라이트 모드 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --text-primary: #333333;
+  --text-secondary: #6c757d;
+  --border-color: #dee2e6;
+
+  /* 대시보드와 모니터링 관련 색상 */
+  --chart-bg: #ffffff;
+  --card-bg: #ffffff;
+  --sidebar-bg: #f8f9fa;
+  --header-bg: #ffffff;
+}
+
+:root[class="dark"] {
+  /* 다크 모드 */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --border-color: #404040;
+
+  /* 대시보드와 모니터링 관련 색상 */
+  --chart-bg: #2d2d2d;
+  --card-bg: #2d2d2d;
+  --sidebar-bg: #1a1a1a;
+  --header-bg: #1a1a1a;
+}
+
+/* 전역 스타일 */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* 페이지 컨테이너 스타일 */
+.page-container {
+  background-color: var(--bg-secondary);
+}
+
+/* 카드 스타일 */
+.card {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+/* 차트 영역 스타일 */
+.chart-container {
+  background-color: var(--chart-bg);
+}
