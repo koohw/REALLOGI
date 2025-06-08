@@ -3,7 +3,7 @@
 ---
 
 ## 프로젝트 소개
-
+![리얼로지메인](리얼로지메인.png)
 RealLogi는 물류센터 관리자를 위한 AGV(Automated Guided Vehicle) 관리 시스템입니다. 디지털 트윈 기술을 활용하여 AGV의 최적 경로를 제공하고, 센서 데이터를 바탕으로 돌발 상황을 감지하며, 물류 프로세스를 효율적으로 운영할 수 있도록 지원합니다.
 
 ### 주요 기능
@@ -176,8 +176,7 @@ python app.py
 - API 문서: https://www.notion.so/RealLogi-API-1a059e7b696980da92f3cfb3a0b20ae7?pvs=4
 
 # 아키텍쳐
-
-![project101__2_](/uploads/888d4aefd3432ff059ad561e4be2dd5e/project101__2_.png)
+![project101__2_](<image (11).png>)
 
 ## 배포 및 테스트
 
